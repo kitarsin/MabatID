@@ -1,4 +1,6 @@
 import dagre from "@dagrejs/dagre";
+import { DETAILS } from "@/data/details";
+import { evaluateApplication, type ApplicationContext } from "./prepare";
 import { CARDS, CARD_BY_ID, type IdCard, type Tier } from "@/data/cards";
 
 export type NodeStatus = "owned" | "available" | "locked";
@@ -7,35 +9,34 @@ export const NODE_W = 112;
 export const NODE_H = 124;
 export const ROW_GAP = 190;
 
-export function statusOf(card: IdCard, owned: ReadonlySet<string>): NodeStatus {
-  if (owned.has(card.id)) return "owned";
-  const allOk = (card.all ?? []).every((id) => owned.has(id));
-  const anyOk = !card.any?.length || card.any.some((id) => owned.has(id));
-  return allOk && anyOk ? "available" : "locked";
+export interface ReadinessContext extends ApplicationContext {
+  prep?: Record<string, string[]>;
+  modes?: Record<string, "online" | "onsite">;
 }
 
-/** Human-readable "what unlocks this" list for locked nodes. */
-export function unlockHint(card: IdCard): { all: IdCard[]; any: IdCard[] } {
-  return {
-    all: (card.all ?? []).map((id) => CARD_BY_ID[id]),
-    any: (card.any ?? []).map((id) => CARD_BY_ID[id]),
-  };
+export function statusOf(
+  card: IdCard,
+  owned: ReadonlySet<string>,
+  context: ReadinessContext = {},
+): NodeStatus {
+  if (owned.has(card.id)) return "owned";
+  return evaluateApplication(card.id, owned, context.prep?.[card.id], {
+    ...context,
+    mode: context.modes?.[card.id] ?? context.mode,
+  }).ready
+    ? "available"
+    : "locked";
 }
 
 export interface TreeEdge {
   id: string;
   source: string;
   target: string;
-  /** all = required · any = one of several accepted · optional = helpful / sometimes asked for */
+  /** Document relationship only; nested route rules and cardinality live in the checklist. */
   kind: "all" | "any" | "optional";
   /** parent and child share a tier row, so the line runs sideways */
   side?: boolean;
 }
-
-/** Main-path parent per card (data lives on the card as `parent`). */
-const PRIMARY_PARENT: Record<string, string> = Object.fromEntries(
-  CARDS.filter((c) => c.parent).map((c) => [c.id, c.parent as string]),
-);
 
 /**
  * Hand-planned columns (1 unit = one node width) so every ID sits directly above,
@@ -44,16 +45,38 @@ const PRIMARY_PARENT: Record<string, string> = Object.fromEntries(
  */
 const GRID: Record<string, number> = {
   // Tier 0 (bottom)
-  school: 1, cedula: 2.25, psa: 3.5, barangay: 7.5,
+  cedula: 2.25,
+  psa: 3.5,
+  barangay: 7.5,
   // Tier 1
-  nbi: 0, npc: 1, comelec: 2, philhealth: 3, tin: 4, postal: 5,
+  "barangay-id": 0,
+  school: 1,
+  nbi: 2,
+  npc: 3,
+  comelec: 4,
+  philhealth: 5,
+  tin: 6,
+  postal: 7,
   // Tier 2 — philsys → lto → pagibig and philsys → mysss run sideways
-  pagibig: 1.5, lto: 2.5, philsys: 3.5, mysss: 4.5, passport: 5.5,
+  pagibig: 1.5,
+  lto: 2.5,
+  philsys: 3.5,
+  mysss: 4.5,
+  passport: 5.5,
   // Tier 3 (top)
-  prc: 2.5, owwa: 5.5, soloparent: 6.5, pwd: 7.5, senior: 8.5,
+  prc: 2.5,
+  owwa: 5.5,
+  soloparent: 6.5,
+  pwd: 7.5,
+  senior: 8.5,
 };
 
-const edgeOf = (source: string, target: string, kind: TreeEdge["kind"], prefix = ""): TreeEdge => ({
+const edgeOf = (
+  source: string,
+  target: string,
+  kind: TreeEdge["kind"],
+  prefix = "",
+): TreeEdge => ({
   id: `${prefix}${source}->${target}`,
   source,
   target,
@@ -61,22 +84,41 @@ const edgeOf = (source: string, target: string, kind: TreeEdge["kind"], prefix =
   side: CARD_BY_ID[source].tier === CARD_BY_ID[target].tier,
 });
 
+/** Derive document relationships from the same checklist evaluated by readiness. */
 export function buildEdges(): TreeEdge[] {
-  return Object.entries(PRIMARY_PARENT).map(([child, parent]) =>
-    edgeOf(parent, child, (CARD_BY_ID[child].all ?? []).includes(parent) ? "all" : "any"),
-  );
+  const edges = new Map<string, TreeEdge>();
+  for (const card of CARDS) {
+    for (const entry of DETAILS[card.id].req.prepare) {
+      const alternative = "either" in entry;
+      const items =
+        "either" in entry ? entry.either.flatMap((r) => r.items) : [entry];
+      for (const item of items)
+        for (const source of item.subject && item.subject !== "self"
+          ? []
+          : (item.ids ?? [])) {
+          if (!CARD_BY_ID[source] || source === card.id) continue;
+          const kind =
+            item.opt || item.when
+              ? "optional"
+              : alternative || (item.ids?.length ?? 0) > 1
+                ? "any"
+                : "all";
+          const edge = edgeOf(source, card.id, kind);
+          const previous = edges.get(edge.id);
+          if (!previous || previous.kind === "optional" || kind === "all")
+            edges.set(edge.id, edge);
+        }
+    }
+  }
+  return [...edges.values()];
 }
 
-/** Every ID that this one helps you get (or that sometimes asks for it). */
-export function leadsTo(id: string): { card: IdCard; kind: TreeEdge["kind"] }[] {
-  const out: { card: IdCard; kind: TreeEdge["kind"] }[] = [];
-  for (const c of CARDS) {
-    if (c.id === id) continue;
-    if (c.all?.includes(id)) out.push({ card: c, kind: "all" });
-    else if (c.any?.includes(id)) out.push({ card: c, kind: "any" });
-    else if (c.optional?.includes(id)) out.push({ card: c, kind: "optional" });
-  }
-  return out;
+export function leadsTo(
+  id: string,
+): { card: IdCard; kind: TreeEdge["kind"] }[] {
+  return buildEdges()
+    .filter((e) => e.source === id)
+    .map((e) => ({ card: CARD_BY_ID[e.target], kind: e.kind }));
 }
 
 export interface Placed {
@@ -89,10 +131,21 @@ const TOP = 60;
 const COL = 116;
 export const rowY = (t: Tier) => TOP + (3 - t) * ROW_GAP; // Tier 0 sits at the BOTTOM
 
-export function layoutTree(): { placed: Placed[]; width: number; height: number; edges: TreeEdge[] } {
+export function layoutTree(): {
+  placed: Placed[];
+  width: number;
+  height: number;
+  edges: TreeEdge[];
+} {
   const edges = buildEdges();
   const g = new dagre.graphlib.Graph();
-  g.setGraph({ rankdir: "BT", nodesep: 24, ranksep: 90, marginx: 0, marginy: 0 });
+  g.setGraph({
+    rankdir: "BT",
+    nodesep: 24,
+    ranksep: 90,
+    marginx: 0,
+    marginy: 0,
+  });
   g.setDefaultEdgeLabel(() => ({}));
   CARDS.forEach((c) => g.setNode(c.id, { width: NODE_W, height: NODE_H }));
   edges.forEach((e) => g.setEdge(e.source, e.target));
@@ -102,9 +155,14 @@ export function layoutTree(): { placed: Placed[]; width: number; height: number;
   const gridMax = Math.max(...Object.values(GRID));
   const dagreXs = CARDS.map((c) => g.node(c.id).x as number);
   const dMin = Math.min(...dagreXs);
-  const colOf = (c: IdCard) => GRID[c.id] ?? ((g.node(c.id).x as number) - dMin) / COL;
+  const colOf = (c: IdCard) =>
+    GRID[c.id] ?? ((g.node(c.id).x as number) - dMin) / COL;
 
-  const placed: Placed[] = CARDS.map((c) => ({ card: c, x: colOf(c) * COL, y: rowY(c.tier) }));
+  const placed: Placed[] = CARDS.map((c) => ({
+    card: c,
+    x: colOf(c) * COL,
+    y: rowY(c.tier),
+  }));
   const width = (Math.max(gridMax, ...placed.map((p) => p.x / COL)) + 1) * COL;
   return { placed, width, height: rowY(0) + NODE_H + 30, edges };
 }
@@ -117,6 +175,16 @@ export const TIER_COUNTS: Record<Tier, number> = {
 };
 
 export function levelTitle(owned: ReadonlySet<string>): string {
-  const top = Math.max(-1, ...CARDS.filter((c) => owned.has(c.id)).map((c) => c.tier));
-  return ["Foundation Builder", "First-ID Holder", "Primary-ID Holder", "Specialist"][top] ?? "Just starting";
+  const top = Math.max(
+    -1,
+    ...CARDS.filter((c) => owned.has(c.id)).map((c) => c.tier),
+  );
+  return (
+    [
+      "Foundation Builder",
+      "First-ID Holder",
+      "Primary-ID Holder",
+      "Specialist",
+    ][top] ?? "Just starting"
+  );
 }

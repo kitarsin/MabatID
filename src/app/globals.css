@@ -88,9 +88,6 @@
   --xy-background-color: transparent;
   background: transparent;
 }
-.react-flow__attribution {
-  display: none;
-}
 .react-flow__edge-path {
   stroke-linecap: round;
 }

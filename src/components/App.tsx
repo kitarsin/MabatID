@@ -3,12 +3,15 @@
 import { useCallback, useMemo, useState } from "react";
 import { LibraryBig, LogOut, Map, TrendingUp } from "lucide-react";
 import { ReactFlowProvider } from "@xyflow/react";
+import type { FactId, ProfileFacts } from "@/data/facts";
+import { stepKey, evaluateApplication, type Mode } from "@/lib/prepare";
 import { CARD_BY_ID } from "@/data/cards";
 import { useStore } from "@/lib/store";
 import { AuthScreen } from "./AuthScreen";
 import { BrowseScreen } from "./BrowseScreen";
 import { DetailSheet } from "./DetailSheet";
-import { FilterBar, matchSet, NO_FILTERS, type Filters } from "./FilterBar";
+import { FilterBar } from "./FilterBar";
+import { matchSet, NO_FILTERS, type Filters } from "@/lib/filters";
 import { Landing } from "./Landing";
 import { Logo } from "./Logo";
 import { Onboarding } from "./Onboarding";
@@ -20,10 +23,30 @@ type Screen = "landing" | "auth" | "tree" | "browse" | "progress" | "edit";
 const EMPTY: ReadonlySet<string> = new Set();
 
 export function App() {
-  const { ready, me, users, logout, toggleOwned, togglePrep, toggleTrack, setPriority, savePrefs } = useStore();
+  const {
+    ready,
+    me,
+    logout,
+    toggleOwned,
+    togglePrep,
+    toggleTrack,
+    setPriority,
+    savePrefs,
+    setFact,
+    setMode,
+    setDocumentEvidence,
+  } = useStore();
+  const [guestFacts, setGuestFacts] = useState<ProfileFacts>({});
+  const [guestAge, setGuestAge] = useState<number | null>(null);
+  const [guestModes, setGuestModes] = useState<Record<string, Mode>>({});
+  const facts = me?.facts ?? guestFacts;
+  const onSetFact = (id: FactId, value: boolean | undefined) =>
+    me ? setFact(id, value) : setGuestFacts((f) => ({ ...f, [id]: value }));
+  const onSetMode = (id: string, mode: Mode) =>
+    me ? setMode(id, mode) : setGuestModes((m) => ({ ...m, [id]: mode }));
   const [screen, setScreen] = useState<Screen>("landing");
   const [selected, setSelected] = useState<string | null>(null);
-  // Ticked "Prepare" items: saved on the account when signed in, otherwise kept for this visit only.
+  // Ticked "Prepare" items: saved on the device profile, otherwise kept for this visit only.
   const [guestPrep, setGuestPrep] = useState<Record<string, string[]>>({});
   const prep = me ? (me.prep ?? {}) : guestPrep;
   const onTogglePrep = useCallback(
@@ -31,39 +54,100 @@ export function App() {
       if (me) return togglePrep(id, key);
       setGuestPrep((g) => {
         const cur = g[id] ?? [];
-        return { ...g, [id]: cur.includes(key) ? cur.filter((x) => x !== key) : [...cur, key] };
+        const sequence = evaluateApplication(id, EMPTY, cur, {
+          age: guestAge,
+          facts: guestFacts,
+          mode: guestModes[id],
+        }).steps;
+        if (cur.includes(key)) {
+          const index = sequence.findIndex((s) => stepKey(s.step) === key);
+          const clear = new Set([
+            key,
+            ...(index < 0
+              ? []
+              : sequence.slice(index).map((s) => stepKey(s.step))),
+          ]);
+          return { ...g, [id]: cur.filter((k) => !clear.has(k)) };
+        }
+        if (
+          key.startsWith("step:") &&
+          !sequence.find((s) => stepKey(s.step) === key)?.enabled
+        )
+          return g;
+        return { ...g, [id]: [...cur, key] };
       });
     },
-    [me, togglePrep],
+    [me, togglePrep, guestAge, guestFacts, guestModes],
   );
   const [filters, setFilters] = useState<Filters>(NO_FILTERS);
-  const matchIds = useMemo(() => matchSet(filters), [filters]);
 
-  const owned = useMemo<ReadonlySet<string>>(() => (me ? new Set(me.owned) : EMPTY), [me]);
+  const context = useMemo(
+    () => ({
+      age: me?.age ?? guestAge,
+      facts: me?.facts ?? guestFacts,
+      documents: me?.documents,
+      prep: me?.prep ?? guestPrep,
+      modes: me?.modes ?? guestModes,
+      setup: me?.setup,
+    }),
+    [me, guestAge, guestFacts, guestPrep, guestModes],
+  );
+  const matchIds = useMemo(
+    () => matchSet(filters, context),
+    [filters, context],
+  );
+  const owned = useMemo<ReadonlySet<string>>(
+    () => (me ? new Set(me.owned) : EMPTY),
+    [me],
+  );
   // `selected` keeps its connection lines lit after the sheet closes; tapping empty canvas clears it.
   const [sheetOpen, setSheetOpen] = useState(false);
-  const select = useCallback((id: string) => { setSelected(id); setSheetOpen(true); }, []);
+  const select = useCallback((id: string) => {
+    setSelected(id);
+    setSheetOpen(true);
+  }, []);
   const clearSelection = useCallback(() => setSelected(null), []);
 
   if (!ready) return <div className="min-h-dvh bg-navy" aria-busy="true" />;
 
-  // Logged-in users skip the landing screen.
-  const view: Screen = me && (screen === "landing" || screen === "auth") ? "tree" : screen;
+  // Active device profiles skip the landing screen.
+  const view: Screen =
+    me && (screen === "landing" || screen === "auth") ? "tree" : screen;
 
-  // First sign-in / register: ask what they have and how they like to apply.
+  // New device profiles start with document and application preferences.
   if (me && (!me.onboarded || screen === "edit"))
     return (
       <Onboarding
         me={me}
         editing={!!me.onboarded}
-        onSave={(p) => { savePrefs(p); setScreen("tree"); }}
+        onSave={(p) => {
+          savePrefs(p);
+          setScreen("tree");
+        }}
         onCancel={() => setScreen("progress")}
       />
     );
 
-  if (view === "landing") return <Landing onAuth={() => setScreen("auth")} onPreview={() => setScreen("tree")} />;
+  if (view === "landing")
+    return (
+      <Landing
+        onAuth={() => setScreen("auth")}
+        onPreview={() => setScreen("tree")}
+      />
+    );
   if (view === "auth")
-    return <AuthScreen initial="register" onBack={() => setScreen("landing")} onDone={() => setScreen("tree")} />;
+    return (
+      <AuthScreen
+        onBack={() => {
+          setScreen(selected ? "tree" : "landing");
+          setSheetOpen(!!selected);
+        }}
+        onDone={() => {
+          setScreen("tree");
+          setSheetOpen(!!selected);
+        }}
+      />
+    );
 
   return (
     <div className="flex h-dvh flex-col">
@@ -72,10 +156,15 @@ export function App() {
         {me ? (
           <button
             type="button"
-            onClick={() => { logout(); setScreen("landing"); }}
+            onClick={() => {
+              logout();
+              setSelected(null);
+              setSheetOpen(false);
+              setScreen("landing");
+            }}
             className="inline-flex items-center gap-1.5 rounded-lg px-3 py-2 text-sm font-semibold text-mist hover:bg-white/10"
           >
-            <LogOut className="size-4" aria-hidden="true" /> Log out
+            <LogOut className="size-4" aria-hidden="true" /> Switch profile
           </button>
         ) : (
           <button
@@ -83,14 +172,15 @@ export function App() {
             onClick={() => setScreen("auth")}
             className="rounded-xl bg-amber px-4 py-2 text-sm font-bold text-navy hover:bg-amber/85"
           >
-            Log in / Register
+            Open device profile
           </button>
         )}
       </header>
 
       {!me && (
         <p className="bg-mist px-4 py-2 text-center text-sm font-semibold text-navy">
-          Preview mode — tap any ID to see its details. Register to track your progress.
+          Preview mode — tap any ID to see its details. Use a device profile to
+          save your progress.
         </p>
       )}
 
@@ -98,31 +188,72 @@ export function App() {
         {view === "tree" ? (
           <>
             <ReactFlowProvider>
-              <SkillTree owned={owned} selectedId={selected} onSelect={select} onClear={clearSelection} matchIds={matchIds} liftControls={!!me?.priority} />
+              <SkillTree
+                context={context}
+                owned={owned}
+                selectedId={selected}
+                onSelect={select}
+                onClear={clearSelection}
+                matchIds={matchIds}
+                liftControls={!!me?.priority}
+              />
             </ReactFlowProvider>
             <Legend />
-            <FilterBar filters={filters} onChange={setFilters} />
+            <FilterBar
+              filters={filters}
+              onChange={setFilters}
+              context={context}
+            />
             {me && <TrackingBar me={me} onOpen={select} />}
           </>
         ) : view === "browse" ? (
           <div className="h-full overflow-y-auto bg-background pb-24">
-            <BrowseScreen owned={owned} onOpen={select} />
+            <BrowseScreen
+              owned={owned}
+              onOpen={select}
+              kind={filters.kind}
+              onKindChange={(kind) =>
+                setFilters((previous) => ({ ...previous, kind }))
+              }
+            />
           </div>
         ) : (
           me && (
             <div className="h-full overflow-y-auto bg-background pb-24">
-              <ProgressScreen me={me} users={users} onSetPriority={setPriority} onStopTracking={toggleTrack} onEdit={() => setScreen("edit")} onPickCard={(id) => { setScreen("tree"); select(id); }} />
+              <ProgressScreen
+                me={me}
+                onSetPriority={setPriority}
+                onStopTracking={toggleTrack}
+                onEdit={() => setScreen("edit")}
+                onPickCard={(id) => {
+                  setScreen("tree");
+                  select(id);
+                }}
+              />
             </div>
           )
         )}
-        <Dock view={view} onGo={setScreen} signedIn={!!me} raised={view === "tree" && !!me?.priority} />
+        <Dock
+          view={view}
+          onGo={setScreen}
+          signedIn={!!me}
+          raised={view === "tree" && !!me?.priority}
+        />
       </main>
 
       <DetailSheet
         card={selected && sheetOpen ? CARD_BY_ID[selected] : null}
         owned={owned}
         signedIn={!!me}
-        age={me?.age ?? null}
+        age={me?.age ?? guestAge}
+        facts={facts}
+        documents={me?.documents ?? {}}
+        onSetDocument={setDocumentEvidence}
+        mode={selected ? (me?.modes ?? guestModes)[selected] : undefined}
+        modes={me?.modes ?? guestModes}
+        onSetFact={onSetFact}
+        onSetMode={onSetMode}
+        onSetAge={setGuestAge}
         budget={me?.budget}
         setup={me?.setup}
         prep={prep}
@@ -134,25 +265,52 @@ export function App() {
         onClose={() => setSheetOpen(false)}
         onToggle={toggleOwned}
         onJump={select}
-        onSignUp={() => { setSelected(null); setSheetOpen(false); setScreen("auth"); }}
+        onSignUp={() => {
+          setSheetOpen(false);
+          setScreen("auth");
+        }}
       />
     </div>
   );
 }
 
 /** Floating icon buttons on the left edge that switch between the ID path and Progress. */
-function Dock({ view, onGo, raised, signedIn }: { view: Screen; onGo: (s: Screen) => void; raised: boolean; signedIn: boolean }) {
+function Dock({
+  view,
+  onGo,
+  raised,
+  signedIn,
+}: {
+  view: Screen;
+  onGo: (s: Screen) => void;
+  raised: boolean;
+  signedIn: boolean;
+}) {
   const items: { id: Screen; label: string; icon: React.ReactNode }[] = [
     { id: "tree", label: "ID path", icon: <Map className="size-6" /> },
-    { id: "browse", label: "Browse IDs", icon: <LibraryBig className="size-6" /> },
+    {
+      id: "browse",
+      label: "Browse IDs & documents",
+      icon: <LibraryBig className="size-6" />,
+    },
     // Progress needs an account, so preview users only get the first two.
-    ...(signedIn ? [{ id: "progress" as Screen, label: "Progress", icon: <TrendingUp className="size-6" /> }] : []),
+    ...(signedIn
+      ? [
+          {
+            id: "progress" as Screen,
+            label: "Progress",
+            icon: <TrendingUp className="size-6" />,
+          },
+        ]
+      : []),
   ];
   return (
     <nav
       aria-label="Main"
       className={`absolute left-3 z-30 flex flex-col gap-2 rounded-full bg-navy/95 p-1.5 shadow-xl ring-1 ring-white/20 backdrop-blur ${
-        raised ? "bottom-[calc(env(safe-area-inset-bottom)+4rem)]" : "bottom-[max(1rem,env(safe-area-inset-bottom))]"
+        raised
+          ? "bottom-[calc(env(safe-area-inset-bottom)+4rem)]"
+          : "bottom-[max(1rem,env(safe-area-inset-bottom))]"
       }`}
     >
       {items.map((it) => {
@@ -180,9 +338,20 @@ function Dock({ view, onGo, raised, signedIn }: { view: Screen; onGo: (s: Screen
 function Legend() {
   return (
     <ul className="pointer-events-none absolute left-3 top-3 z-10 flex flex-col gap-1.5 rounded-xl bg-white/90 p-2.5 text-[11px] font-bold text-navy shadow ring-1 ring-border backdrop-blur">
-      <li className="flex items-center gap-2"><span className="size-3 rounded-full bg-amber" /> Obtained</li>
-      <li className="flex items-center gap-2"><span className="size-3 rounded-full border-2 border-civic bg-white" /> Ready to get</li>
-      <li className="flex items-center gap-2"><span className="size-3 rounded-full border border-dashed border-slate-500 bg-white" /> Locked</li>
+      <li className="flex items-center gap-2">
+        <span className="size-3 rounded-full bg-amber" /> Obtained
+      </li>
+      <li className="flex items-center gap-2">
+        <span className="size-3 rounded-full border-2 border-civic bg-white" />{" "}
+        Requirements ready
+      </li>
+      <li className="flex items-center gap-2">
+        <span className="size-3 rounded-full border border-dashed border-slate-500 bg-white" />{" "}
+        Needs preparation
+      </li>
+      <li className="max-w-36 border-t border-border pt-1.5 text-[10px] font-normal">
+        Overview links only. Select an ID to see document relationships.
+      </li>
     </ul>
   );
 }

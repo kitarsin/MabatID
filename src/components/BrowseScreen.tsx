@@ -2,34 +2,61 @@
 
 import { useMemo, useState } from "react";
 import { Building2, Check, Globe, Search } from "lucide-react";
-import { CARDS, CATEGORY_META, TIER_META, type Category, type Tier } from "@/data/cards";
+import {
+  CARDS,
+  CARD_KIND_META,
+  CATEGORY_META,
+  TIER_META,
+  type Category,
+  type CardKind,
+  type Tier,
+} from "@/data/cards";
 import { DETAILS } from "@/data/details";
+import { matchSet, NO_FILTERS } from "@/lib/filters";
+import { CardKindFilter } from "./CardKindFilter";
 import { CardIcon } from "./icons";
 import { Rich } from "./Rich";
 
 const TIERS: Tier[] = [0, 1, 2, 3];
 
 /** Every ID in the app, open to everyone (signed in or not). Tapping one opens its full details. */
-export function BrowseScreen({ owned, onOpen }: { owned: ReadonlySet<string>; onOpen: (id: string) => void }) {
+export function BrowseScreen({
+  owned,
+  onOpen,
+  kind,
+  onKindChange,
+}: {
+  owned: ReadonlySet<string>;
+  onOpen: (id: string) => void;
+  kind: CardKind | null;
+  onKindChange: (kind: CardKind | null) => void;
+}) {
   const [q, setQ] = useState("");
   const [cat, setCat] = useState<Category | null>(null);
 
   const list = useMemo(() => {
     const term = q.trim().toLowerCase();
+    const matching = matchSet({ ...NO_FILTERS, kind, category: cat });
     return CARDS.filter((c) => {
-      if (cat && c.category !== cat) return false;
+      if (matching && !matching.has(c.id)) return false;
       if (!term) return true;
       const d = DETAILS[c.id];
-      return [c.name, c.short, d.issuedBy, d.purpose].join(" ").toLowerCase().includes(term);
+      return [c.name, c.short, d.issuedBy, d.purpose]
+        .join(" ")
+        .toLowerCase()
+        .includes(term);
     });
-  }, [q, cat]);
+  }, [q, cat, kind]);
 
   return (
     <div className="mx-auto w-full max-w-md space-y-4 px-5 pb-10 pt-5">
       <div>
-        <h1 className="text-2xl font-extrabold tracking-tight">All IDs</h1>
+        <h1 className="text-2xl font-extrabold tracking-tight">
+          IDs &amp; documents
+        </h1>
         <p className="text-sm text-muted-foreground">
-          Browse every ID and document — requirements, steps and official references.
+          Browse every ID and document — requirements, steps and official
+          references.
         </p>
       </div>
 
@@ -43,28 +70,46 @@ export function BrowseScreen({ owned, onOpen }: { owned: ReadonlySet<string>; on
           value={q}
           onChange={(e) => setQ(e.target.value)}
           placeholder="Search by name or agency"
-          aria-label="Search IDs"
+          aria-label="Search IDs and documents"
           className="h-12 w-full rounded-2xl border-2 border-input bg-card pl-11 pr-4 text-base outline-none focus:border-civic"
         />
       </div>
 
-      <div className="-mx-5 flex gap-2 overflow-x-auto px-5 pb-1" role="group" aria-label="Filter by significance">
+      <CardKindFilter value={kind} onChange={onKindChange} />
+
+      <div
+        className="-mx-5 flex gap-2 overflow-x-auto px-5 pb-1"
+        role="group"
+        aria-label="Filter by significance"
+      >
         <Chip on={cat === null} onClick={() => setCat(null)}>
           All
         </Chip>
         {(Object.keys(CATEGORY_META) as Category[]).map((c) => (
-          <Chip key={c} on={cat === c} onClick={() => setCat(cat === c ? null : c)}>
+          <Chip
+            key={c}
+            on={cat === c}
+            onClick={() => setCat(cat === c ? null : c)}
+          >
             {CATEGORY_META[c].label}
           </Chip>
         ))}
       </div>
 
-      <p className="text-sm font-semibold text-muted-foreground" aria-live="polite">
-        {list.length} of {CARDS.length} IDs
+      <p
+        className="text-sm font-semibold text-muted-foreground"
+        aria-live="polite"
+      >
+        {list.length} of {CARDS.length} items
       </p>
 
       {list.length === 0 && (
-        <p className="rounded-2xl bg-muted p-4 text-sm">No IDs match “{q}”. Try another name or agency.</p>
+        <p className="rounded-2xl bg-muted p-4 text-sm">
+          {q.trim()
+            ? `No items match “${q.trim()}” with these filters.`
+            : "No items match these filters."}{" "}
+          Try another type, category or search.
+        </p>
       )}
 
       {TIERS.map((t) => {
@@ -72,7 +117,10 @@ export function BrowseScreen({ owned, onOpen }: { owned: ReadonlySet<string>; on
         if (!items.length) return null;
         return (
           <section key={t} aria-labelledby={`browse-tier-${t}`}>
-            <h2 id={`browse-tier-${t}`} className="mb-2 text-xs font-bold uppercase tracking-wider text-civic">
+            <h2
+              id={`browse-tier-${t}`}
+              className="mb-2 text-xs font-bold uppercase tracking-wider text-civic"
+            >
               {TIER_META[t].label}
             </h2>
             <ul className="space-y-2">
@@ -90,27 +138,45 @@ export function BrowseScreen({ owned, onOpen }: { owned: ReadonlySet<string>; on
                       </span>
                       <span className="min-w-0 flex-1">
                         <span className="flex items-start justify-between gap-2">
-                          <span className="text-[15px] font-extrabold leading-snug">{c.name}</span>
+                          <span className="text-[15px] font-extrabold leading-snug">
+                            {c.name}
+                          </span>
                           {owned.has(c.id) && (
                             <span className="inline-flex shrink-0 items-center gap-1 rounded-full bg-amber px-2 py-0.5 text-[11px] font-extrabold text-navy">
-                              <Check className="size-3" strokeWidth={3} aria-hidden="true" /> Have
+                              <Check
+                                className="size-3"
+                                strokeWidth={3}
+                                aria-hidden="true"
+                              />{" "}
+                              Have
                             </span>
                           )}
                         </span>
-                        <span className="mt-0.5 block text-xs font-semibold text-muted-foreground">{d.issuedBy}</span>
+                        <span className="mt-0.5 block text-xs font-semibold text-muted-foreground">
+                          {d.issuedBy}
+                        </span>
                         <span className="mt-1.5 block text-sm leading-snug">
                           <Rich text={d.req.fee} />
                         </span>
                         <span className="mt-2 flex flex-wrap gap-1.5">
+                          {c.starter && <Tag>Starter ID</Tag>}
+                          <Tag>{CARD_KIND_META[c.kind].singular}</Tag>
                           <Tag>{CATEGORY_META[c.category].label}</Tag>
                           {d.onsite && (
                             <Tag>
-                              <Building2 className="size-3" aria-hidden="true" /> On-site
+                              <Building2
+                                className="size-3"
+                                aria-hidden="true"
+                              />{" "}
+                              On-site
                             </Tag>
                           )}
                           {d.online && (
                             <Tag>
-                              <Globe className="size-3" aria-hidden="true" /> Online
+                              <Globe className="size-3" aria-hidden="true" />{" "}
+                              {d.onlineRequiresVisit
+                                ? "Online + visit"
+                                : "Online"}
                             </Tag>
                           )}
                         </span>
@@ -127,14 +193,24 @@ export function BrowseScreen({ owned, onOpen }: { owned: ReadonlySet<string>; on
   );
 }
 
-function Chip({ on, onClick, children }: { on: boolean; onClick: () => void; children: React.ReactNode }) {
+function Chip({
+  on,
+  onClick,
+  children,
+}: {
+  on: boolean;
+  onClick: () => void;
+  children: React.ReactNode;
+}) {
   return (
     <button
       type="button"
       onClick={onClick}
       aria-pressed={on}
       className={`shrink-0 rounded-full border-2 px-3.5 py-1.5 text-sm font-bold ${
-        on ? "border-civic bg-civic text-white" : "border-border bg-white text-navy hover:bg-muted"
+        on
+          ? "border-civic bg-civic text-white"
+          : "border-border bg-white text-navy hover:bg-muted"
       }`}
     >
       {children}
