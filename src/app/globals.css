@@ -31,6 +31,8 @@
   --color-sky: #60c1e5;
   --color-mist: #a0e0ef;
   --color-amber: #ffa500;
+  --color-locked: var(--locked);
+  --color-locked-line: var(--locked-line);
   --radius-sm: calc(var(--radius) * 0.6);
   --radius-md: calc(var(--radius) * 0.8);
   --radius-lg: var(--radius);
@@ -65,7 +67,36 @@
   --input: #9fcfdc;
   --ring: #005a9c;
   --radius: 0.875rem;
+
+  /* focus: one ring for every control, colour chosen per surface */
+  --focus: #005a9c; /* civic on light surfaces: 7.1:1 vs white, 5:1 vs mist */
+  /* locked state (tinted from navy, replaces slate-*) */
+  --locked: #5d7190; /* text / icon: 4.98:1 on white, 4.74:1 on #f3fbfd */
+  --locked-line: #7a8ea9; /* dashed borders + edges: >=3.1:1 on #f3fbfd */
+
+  /* motion */
+  --ease-out: cubic-bezier(0.2, 0.8, 0.2, 1);
+  --dur-press: 90ms;
+  --dur-fast: 140ms; /* hover, press release, chip toggle */
+  --dur-base: 200ms; /* state changes */
+  --dur-pop-in: 160ms;
+  --dur-pop-out: 120ms;
+  --dur-sheet-in: 220ms;
+  --dur-sheet-out: 160ms;
 }
+
+/* Navy surfaces: amber focus ring (6.1:1 on navy). */
+.surface-navy {
+  --focus: #ffa500;
+}
+
+/* Wide-desktop landing layout starts here (utility: hero:...). */
+@theme {
+  --breakpoint-hero: 900px;
+}
+
+/* Short, narrow viewports (small phones): utility short:... compacts vertical spacing. Desktop is unaffected. */
+@custom-variant short (@media (max-height: 640px) and (max-width: 899px));
 
 @layer base {
   * {
@@ -73,13 +104,37 @@
   }
   body {
     @apply bg-background text-foreground;
+    touch-action: manipulation;
   }
   html {
     @apply font-sans;
+    -webkit-tap-highlight-color: transparent;
   }
   :focus-visible {
-    outline: 3px solid #ffa500;
+    outline: 3px solid var(--focus);
     outline-offset: 2px;
+  }
+  h1,
+  h2,
+  h3 {
+    text-wrap: balance;
+  }
+  p {
+    text-wrap: pretty;
+  }
+}
+
+/* A custom control built from a visually hidden native input shows the ring on its wrapper. */
+@layer components {
+  .focus-ring-within:has(:focus-visible) {
+    outline: 3px solid var(--focus);
+    outline-offset: 2px;
+  }
+}
+
+@media (pointer: fine) {
+  html {
+    overscroll-behavior: none;
   }
 }
 
@@ -94,24 +149,107 @@
 .react-flow__edge-path {
   stroke-linecap: round;
 }
-@keyframes edge-flow {
-  to {
-    stroke-dashoffset: -24;
+.react-flow__controls-button {
+  transition: background-color var(--dur-fast) var(--ease-out);
+}
+@media (pointer: coarse) {
+  .react-flow__controls-button {
+    width: 44px;
+    height: 44px;
   }
 }
-.edge-available {
-  animation: edge-flow 1.4s linear infinite;
+
+/* ---------- Motion ---------- */
+/* Only transform / opacity are animated (plus colour on small controls). */
+
+/* Tree node circle: colour cross-fade 200ms, hover/press scale 140ms. */
+.node-circle {
+  transition:
+    background-color var(--dur-base) var(--ease-out),
+    border-color var(--dur-base) var(--ease-out),
+    color var(--dur-base) var(--ease-out),
+    scale var(--dur-fast) var(--ease-out);
 }
-@keyframes node-pulse {
-  0%, 100% { box-shadow: 0 0 0 0 rgba(0, 90, 156, 0.35); }
-  50% { box-shadow: 0 0 0 9px rgba(0, 90, 156, 0); }
+
+/* The one pulse: a ring that scales out and fades, 3 times, then rests. */
+@keyframes ring-pulse {
+  from { transform: scale(1); opacity: 0.5; }
+  to { transform: scale(1.35); opacity: 0; }
 }
-.node-available {
-  animation: node-pulse 2.2s ease-in-out infinite;
+.pulse-ring::after {
+  content: "";
+  position: absolute;
+  inset: -3px;
+  border-radius: 9999px;
+  border: 3px solid var(--pulse-color, var(--color-civic));
+  opacity: 0;
+  pointer-events: none;
+  animation: ring-pulse 2.2s var(--ease-out) var(--pulse-delay, 0s) var(--pulse-count, 3) forwards;
 }
+.pulse-once {
+  --pulse-count: 1;
+}
+
+/* Dashed edge into the pulsing node: marches 3 loops, then rests. */
+@keyframes edge-flow {
+  to { stroke-dashoffset: -28; }
+}
+.edge-flow-active {
+  animation: edge-flow 1.4s linear 3;
+}
+
+/* "I have this ID": the node settles with one small bounce. */
+@keyframes node-got {
+  0% { transform: scale(1); }
+  45% { transform: scale(1.08); }
+  100% { transform: scale(1); }
+}
+.node-got {
+  animation: node-got 320ms var(--ease-out);
+}
+
+/* Landing entrance (once): groups rise + fade, hero edges draw. */
+@keyframes rise {
+  from { opacity: 0; transform: translateY(var(--rise-y, 10px)); }
+  to { opacity: 1; transform: none; }
+}
+.rise {
+  animation: rise var(--rise-dur, 280ms) var(--ease-out) var(--d, 0ms) both;
+}
+@keyframes edge-draw-x {
+  from { transform: scaleX(0); }
+  to { transform: scaleX(1); }
+}
+@keyframes edge-draw-y {
+  from { transform: scaleY(0); }
+  to { transform: scaleY(1); }
+}
+.draw-edge {
+  transform-origin: left center;
+  animation: edge-draw-x 360ms var(--ease-out) var(--d, 0ms) both;
+}
+@media (min-width: 900px) {
+  .draw-edge {
+    transform-origin: center bottom;
+    animation-name: edge-draw-y;
+  }
+}
+
 @media (prefers-reduced-motion: reduce) {
-  .edge-available,
-  .node-available {
-    animation: none;
+  *, *::before, *::after {
+    animation-iteration-count: 1 !important;
+    animation-duration: 1ms !important;
+  }
+  .pulse-ring::after,
+  .edge-flow-active,
+  .node-got,
+  .rise,
+  .draw-edge {
+    animation: none !important;
+  }
+  /* Sheet fades instead of sliding; colour/state changes stay visible. */
+  [data-slot="sheet-content"] {
+    transition-property: opacity;
+    translate: none !important;
   }
 }

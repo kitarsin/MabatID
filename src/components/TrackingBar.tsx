@@ -17,23 +17,20 @@ export function TrackingBar({ me, onOpen }: { me: User; onOpen: (id: string) => 
       type="button"
       onClick={() => onOpen(id)}
       aria-label={`Priority: ${card.name}, ${p.pct} percent done. ${p.stage}. Open details.`}
-      className="absolute inset-x-0 bottom-0 z-20 bg-navy pb-[env(safe-area-inset-bottom)] text-left text-white shadow-[0_-2px_10px_rgba(27,54,93,0.25)]"
+      className="surface-navy relative z-10 w-full shrink-0 bg-navy text-left text-white shadow-[0_-2px_10px_color-mix(in_srgb,var(--color-navy)_25%,transparent)]"
     >
-      <span
-        role="progressbar"
-        aria-valuemin={0}
-        aria-valuemax={100}
-        aria-valuenow={p.pct}
-        aria-label="Progress toward the priority ID"
-        className="block h-1 bg-white/20"
-      >
-        <span className="block h-full bg-amber transition-all" style={{ width: `${p.pct}%` }} />
+      {/* The button's label already announces the percentage; the bar is decoration. */}
+      <span aria-hidden="true" className="block h-1 bg-white/20">
+        <span
+          className="block h-full origin-left bg-amber transition-transform duration-300 ease-[var(--ease-out)]"
+          style={{ transform: `scaleX(${p.pct / 100})` }}
+        />
       </span>
-      <span className="flex items-center gap-2 px-4 py-2.5">
+      <span className="flex min-h-11 items-center gap-2 px-4 py-2.5">
         <Star className="size-4 shrink-0 text-amber" fill="currentColor" aria-hidden="true" />
         <span className="min-w-0 flex-1 truncate text-sm font-bold">{card.name}</span>
-        <span className="shrink-0 text-xs font-semibold text-mist">{p.done}/{p.total}</span>
-        <span className="shrink-0 text-sm font-extrabold">{p.pct}%</span>
+        <span className="shrink-0 text-xs font-semibold tabular-nums text-mist">{p.done}/{p.total}</span>
+        <span className="shrink-0 text-sm font-bold tabular-nums">{p.pct}%</span>
         <ChevronRight className="size-4 shrink-0 text-mist" aria-hidden="true" />
       </span>
     </button>

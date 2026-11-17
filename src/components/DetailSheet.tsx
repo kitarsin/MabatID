@@ -1,8 +1,10 @@
 "use client";
 
-import { useRef } from "react";
+import { useId, useRef } from "react";
 import { Building2, Check, ExternalLink, Globe, Lock, Star, Target, Wallet } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { Chip } from "@/components/ui/chip";
+import { Pill } from "@/components/ui/pill";
 import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { CARD_BY_ID, TIER_META, type IdCard } from "@/data/cards";
@@ -30,6 +32,7 @@ export function DetailSheet({
   onToggle,
   onJump,
   onSignUp,
+  finalFocus,
 }: {
   card: IdCard | null;
   owned: ReadonlySet<string>;
@@ -47,6 +50,8 @@ export function DetailSheet({
   onToggle: (id: string) => void;
   onJump: (id: string) => void;
   onSignUp: () => void;
+  /** Element to focus when the sheet closes (the control that opened it). Falls back to Base UI's default. */
+  finalFocus?: () => HTMLElement | null;
 }) {
   const bodyRef = useRef<HTMLDivElement>(null); // focus lands here, not on a control mid-scroll
   const status = card ? statusOf(card, owned) : "locked";
@@ -78,11 +83,13 @@ export function DetailSheet({
       <SheetContent
         side="bottom"
         initialFocus={bodyRef}
+        finalFocus={finalFocus}
+        closeClassName="text-white hover:bg-white/15 hover:text-white [--focus:var(--color-amber)]"
         className="mx-auto flex max-h-[90dvh] w-full max-w-2xl flex-col gap-0 rounded-t-3xl border-0 bg-card p-0 text-card-foreground"
       >
         {card && d && (
           <>
-            <SheetHeader className="gap-1 bg-navy p-5 pr-14 text-white">
+            <SheetHeader className="surface-navy gap-2 bg-navy p-5 pr-16 text-white">
               <div className="flex items-center gap-3">
                 <span
                   className={`grid size-14 shrink-0 place-items-center rounded-full border-[3px] ${
@@ -95,34 +102,138 @@ export function DetailSheet({
                 >
                   <CardIcon name={card.icon} className="size-7" />
                 </span>
-                <SheetTitle className="text-lg font-extrabold leading-snug text-white">{card.name}</SheetTitle>
+                <SheetTitle className="text-lg font-bold leading-snug text-white">{card.name}</SheetTitle>
               </div>
-              <SheetDescription className="mt-1 text-sm font-semibold text-mist">
-                {status === "owned" ? "✓ You have this" : status === "available" ? "Ready to get" : "Locked — see what unlocks it"}
-              </SheetDescription>
+              <div>
+                {status === "owned" ? (
+                  <Pill tone="amber"><Check className="size-3.5" strokeWidth={3} aria-hidden="true" /> You have this</Pill>
+                ) : status === "available" ? (
+                  <Pill tone="mist">Ready to get</Pill>
+                ) : (
+                  <Pill tone="onDark" className="whitespace-normal leading-snug">
+                    <Lock className="size-3.5" aria-hidden="true" /> Locked — see what unlocks it
+                  </Pill>
+                )}
+              </div>
+              {/* The purpose is the lede: one plain sentence under the title (markup stripped, it sits on navy). */}
+              <SheetDescription className="text-sm leading-snug text-mist">{d.purpose.replace(/\*\*/g, "")}</SheetDescription>
             </SheetHeader>
 
-            <div ref={bodyRef} tabIndex={-1} className="flex-1 space-y-6 overflow-y-auto px-5 py-5 outline-none">
-              {/* 1 · About */}
-              <Section n={1} title="About this ID">
-                <dl className="space-y-3 text-[15px]">
-                  <Info label="Purpose"><Rich text={d.purpose} /></Info>
-                  <Info label="Tier level">
-                    <strong className="font-extrabold text-navy">{TIER_META[card.tier].label}</strong>
-                  </Info>
-                  <Info label="Issued by"><strong className="font-extrabold text-navy">{d.issuedBy}</strong></Info>
-                </dl>
-                <div className="mt-3 flex flex-wrap gap-2">
-                  {signedIn && (
-                    <>
-                      <Tag ok={fitsBudget(card.id, budget ?? DEFAULT_BUDGET)} icon={<Wallet className="size-3.5" />}
-                        yes="Fits your budget" no="Over your budget" />
-                      <Tag ok={fitsSetup(card.id, pref)} icon={d.online && pref !== "onsite" ? <Globe className="size-3.5" /> : <Building2 className="size-3.5" />}
-                        yes="Matches your setup" no="Setup not available" />
-                    </>
+            <div ref={bodyRef} tabIndex={-1} className="flex-1 space-y-6 overflow-y-auto overscroll-contain px-5 py-5 outline-none">
+              {/* Locked: lead with what unlocks it */}
+              {status === "locked" && (hint.all.length > 0 || hint.any.length > 0) && (
+                <div className="rounded-2xl border-2 border-dashed border-locked-line p-4">
+                  <p className="mb-2 flex items-center gap-1.5 text-sm font-bold">
+                    <Lock className="size-4" aria-hidden="true" /> Unlock by getting
+                  </p>
+                  {hint.all.length > 0 && <Chips label="All of" ids={hint.all.map((c) => c.id)} owned={owned} onJump={onJump} />}
+                  {hint.any.length > 0 && (
+                    <Chips label={hint.all.length ? "Plus any one of" : "Any one of"} ids={hint.any.map((c) => c.id)} owned={owned} onJump={onJump} />
                   )}
-                  {tooYoung && <Tag ok={false} yes="" no={`Usually opens at ${card.minAge}+`} />}
                 </div>
+              )}
+
+              {/* Requirements */}
+              <Section title="Requirements">
+                {obtained && (
+                  <p className="mb-3 flex items-start gap-2 rounded-xl bg-mist px-3 py-2 text-sm font-bold text-navy" role="status">
+                    <Check className="mt-0.5 size-4 shrink-0" strokeWidth={3} aria-hidden="true" />
+                    You already have this ID — nothing left to prepare.
+                  </p>
+                )}
+                <dl className="space-y-3 text-[15px]">
+                  <Info label="Age"><Rich text={d.req.age} /></Info>
+                  <Info label="Prepare">
+                    <p className="mb-2 text-xs font-semibold tabular-nums text-muted-foreground" aria-live="polite">
+                      Tick each one as you get it · {doneCount}/{totalCount} ready
+                      {autoCount > 0 && !obtained && " · some ticked from your profile"}
+                    </p>
+                    <ul className="space-y-2">
+                      {prepState?.nodes.map((n) =>
+                        n.kind === "row" ? (
+                          <li key={n.row.key}>
+                            <PrepButton row={n.row} budget={n.row.key === "b"} onToggle={() => onTogglePrep(card.id, n.row.key)} />
+                          </li>
+                        ) : (
+                          <li key={n.key} className={`rounded-2xl border-2 border-dashed p-2.5 ${n.complete ? "border-civic" : "border-locked-line"}`}>
+                            <p className="mb-2 flex items-center gap-1 px-1 text-[13px] font-semibold text-civic">
+                              Choose one route
+                              {n.complete && (
+                                <>
+                                  <span aria-hidden="true">·</span>
+                                  <Check className="size-3.5" strokeWidth={3} aria-hidden="true" /> met
+                                </>
+                              )}
+                            </p>
+                            {n.routes.map((r, ri) => (
+                              <div key={ri}>
+                                {ri > 0 && (
+                                  <div role="separator" className="my-2 flex items-center gap-2 text-xs font-semibold text-muted-foreground">
+                                    <span className="h-px flex-1 bg-border" />
+                                    or
+                                    <span className="h-px flex-1 bg-border" />
+                                  </div>
+                                )}
+                                <p className="mb-1.5 flex items-center gap-1 px-1 text-sm font-semibold">
+                                  {r.label}
+                                  {r.complete && (
+                                    <>
+                                      <Check className="size-4 text-civic" strokeWidth={3} aria-hidden="true" />
+                                      <span className="sr-only">(met)</span>
+                                    </>
+                                  )}
+                                </p>
+                                <ul className="space-y-1.5">
+                                  {r.rows.map((row) => (
+                                    <li key={row.key}><PrepButton row={row} onToggle={() => onTogglePrep(card.id, row.key)} /></li>
+                                  ))}
+                                </ul>
+                              </div>
+                            ))}
+                          </li>
+                        ),
+                      )}
+                    </ul>
+                  </Info>
+                  <Info label="Under 18"><Rich text={d.req.minors} /></Info>
+                </dl>
+              </Section>
+
+              {/* Guide */}
+              <Section title="Step-by-step guide">
+                <p
+                  className={`mb-3 flex items-start gap-2 rounded-xl px-3 py-2 text-sm font-bold ${unlocked ? "bg-mist text-navy" : "bg-muted text-navy"}`}
+                  role="status"
+                >
+                  {obtained ? (
+                    <>
+                      <Check className="mt-0.5 size-4 shrink-0" strokeWidth={3} aria-hidden="true" />
+                      Already obtained — no need to apply again.
+                    </>
+                  ) : !setupOk ? (
+                    `Locked — this ID is ${onlyWay || "not available"} only, which doesn’t match your setup. Change it under Progress → Edit to unlock.`
+                  ) : ready ? (
+                    <>
+                      <Check className="mt-0.5 size-4 shrink-0" strokeWidth={3} aria-hidden="true" />
+                      Requirements ready — you can start applying.
+                    </>
+                  ) : (
+                    <span className="tabular-nums">{`Not yet advisable — finish Requirements first (${doneCount}/${totalCount}).`}</span>
+                  )}
+                </p>
+                <Tabs defaultValue={defaultMode} key={card.id}>
+                  <TabsList className="grid h-11 w-full" style={{ gridTemplateColumns: `repeat(${modes.length}, 1fr)` }}>
+                    {modes.includes("onsite") && <TabsTrigger value="onsite"><Building2 className="size-4" /> On-site</TabsTrigger>}
+                    {modes.includes("online") && <TabsTrigger value="online"><Globe className="size-4" /> Online</TabsTrigger>}
+                  </TabsList>
+                  {modes.includes("onsite") && <TabsContent value="onsite"><Steps steps={d.steps.onsite} mode="onsite" done={ticked} enabled={unlocked} onToggle={(k) => onTogglePrep(card.id, k)} /></TabsContent>}
+                  {modes.includes("online") && <TabsContent value="online"><Steps steps={d.steps.online} mode="online" done={ticked} enabled={unlocked} onToggle={(k) => onTogglePrep(card.id, k)} /></TabsContent>}
+                </Tabs>
+                {modes.length === 1 && (
+                  <p className="mt-2 text-xs font-semibold text-muted-foreground">
+                    {modes[0] === "onsite" ? "On-site only — no full online option." : "Online only — no in-person step."}
+                  </p>
+                )}
               </Section>
 
               {/* Where this ID can take you */}
@@ -133,7 +244,7 @@ export function DetailSheet({
                 const extra = next.filter((n) => n.kind === "optional");
                 return (
                   <div className="rounded-2xl bg-muted p-4">
-                    <p className="mb-2 text-sm font-extrabold">Helps you get</p>
+                    <p className="mb-2 text-sm font-bold">Helps you get</p>
                     <div className="flex flex-wrap gap-2">
                       {required.map(({ card: c }) => <JumpChip key={c.id} card={c} owned={owned} onJump={onJump} />)}
                     </div>
@@ -149,98 +260,29 @@ export function DetailSheet({
                 );
               })()}
 
-              {status === "locked" && (hint.all.length > 0 || hint.any.length > 0) && (
-                <div className="rounded-2xl border-2 border-dashed border-input p-4">
-                  <p className="mb-2 flex items-center gap-1.5 text-sm font-extrabold">
-                    <Lock className="size-4" aria-hidden="true" /> Unlock by getting
-                  </p>
-                  {hint.all.length > 0 && <Chips label="All of" ids={hint.all.map((c) => c.id)} owned={owned} onJump={onJump} />}
-                  {hint.any.length > 0 && (
-                    <Chips label={hint.all.length ? "Plus any one of" : "Any one of"} ids={hint.any.map((c) => c.id)} owned={owned} onJump={onJump} />
-                  )}
-                </div>
-              )}
-
-              {/* 2 · Requirements */}
-              <Section n={2} title="Requirements">
-                {obtained && (
-                  <p className="mb-3 rounded-xl bg-mist px-3 py-2 text-sm font-bold text-navy" role="status">
-                    ✓ You already have this ID — nothing left to prepare.
-                  </p>
-                )}
-                <div className={`transition-opacity duration-300 ${obtained ? "opacity-50" : "opacity-100"}`}>
+              {/* About details */}
+              <Section title="About this ID">
                 <dl className="space-y-3 text-[15px]">
-                  <Info label="Age"><Rich text={d.req.age} /></Info>
-                  <Info label="Prepare">
-                    <p className="mb-2 text-xs font-semibold text-muted-foreground" aria-live="polite">
-                      Tick each one as you get it · {doneCount}/{totalCount} ready
-                      {autoCount > 0 && !obtained && " · some ticked from your profile"}
-                    </p>
-                    <ul className="space-y-2">
-                      {prepState?.nodes.map((n) =>
-                        n.kind === "row" ? (
-                          <li key={n.row.key}>
-                            <PrepButton row={n.row} budget={n.row.key === "b"} onToggle={() => onTogglePrep(card.id, n.row.key)} />
-                          </li>
-                        ) : (
-                          <li key={n.key} className={`rounded-2xl border-2 border-dashed p-2.5 ${n.complete ? "border-civic" : "border-input"}`}>
-                            <p className="mb-2 px-1 text-xs font-extrabold uppercase tracking-wide text-civic">
-                              Choose one route {n.complete && "· ✓ met"}
-                            </p>
-                            {n.routes.map((r, ri) => (
-                              <div key={ri}>
-                                {ri > 0 && <p className="my-1.5 text-center text-xs font-extrabold text-muted-foreground">— OR —</p>}
-                                <p className="mb-1.5 px-1 text-sm font-bold">{r.label}{r.complete && " ✓"}</p>
-                                <ul className="space-y-1.5">
-                                  {r.rows.map((row) => (
-                                    <li key={row.key}><PrepButton row={row} onToggle={() => onTogglePrep(card.id, row.key)} /></li>
-                                  ))}
-                                </ul>
-                              </div>
-                            ))}
-                          </li>
-                        ),
-                      )}
-                    </ul>
+                  <Info label="Tier level">
+                    <strong className="font-bold text-navy">{TIER_META[card.tier].label}</strong>
                   </Info>
-                  <Info label="Under 18"><Rich text={d.req.minors} /></Info>
+                  <Info label="Issued by"><strong className="font-bold text-navy">{d.issuedBy}</strong></Info>
                 </dl>
+                <div className="mt-3 flex flex-wrap gap-2">
+                  {signedIn && (
+                    <>
+                      <FitTag ok={fitsBudget(card.id, budget ?? DEFAULT_BUDGET)} icon={<Wallet className="size-3.5" aria-hidden="true" />}
+                        yes="Fits your budget" no="Over your budget" />
+                      <FitTag ok={fitsSetup(card.id, pref)} icon={d.online && pref !== "onsite" ? <Globe className="size-3.5" aria-hidden="true" /> : <Building2 className="size-3.5" aria-hidden="true" />}
+                        yes="Matches your setup" no="Setup not available" />
+                    </>
+                  )}
+                  {tooYoung && <FitTag ok={false} yes="" no={`Usually opens at ${card.minAge}+`} />}
                 </div>
               </Section>
 
-              {/* 3 · Guide */}
-              <Section n={3} title="Step-by-step guide">
-                <p
-                  className={`mb-3 rounded-xl px-3 py-2 text-sm font-bold ${unlocked ? "bg-mist text-navy" : "bg-muted text-navy"}`}
-                  role="status"
-                >
-                  {obtained
-                    ? "✓ Already obtained — no need to apply again."
-                    : !setupOk
-                      ? `Locked — this ID is ${onlyWay || "not available"} only, which doesn’t match your setup. Change it under Progress → Edit to unlock.`
-                      : ready
-                        ? "✓ Requirements ready — you can start applying."
-                        : `Not yet advisable — finish section 2 first (${doneCount}/${totalCount}).`}
-                </p>
-                <div className={`transition-opacity duration-300 ${unlocked ? "opacity-100" : "opacity-40"}`}>
-                <Tabs defaultValue={defaultMode} key={card.id}>
-                  <TabsList className="grid h-11 w-full" style={{ gridTemplateColumns: `repeat(${modes.length}, 1fr)` }}>
-                    {modes.includes("onsite") && <TabsTrigger value="onsite"><Building2 className="size-4" /> On-site</TabsTrigger>}
-                    {modes.includes("online") && <TabsTrigger value="online"><Globe className="size-4" /> Online</TabsTrigger>}
-                  </TabsList>
-                  {modes.includes("onsite") && <TabsContent value="onsite"><Steps steps={d.steps.onsite} mode="onsite" done={ticked} enabled={unlocked} onToggle={(k) => onTogglePrep(card.id, k)} /></TabsContent>}
-                  {modes.includes("online") && <TabsContent value="online"><Steps steps={d.steps.online} mode="online" done={ticked} enabled={unlocked} onToggle={(k) => onTogglePrep(card.id, k)} /></TabsContent>}
-                </Tabs>
-                {modes.length === 1 && (
-                  <p className="mt-2 text-xs font-semibold text-muted-foreground">
-                    {modes[0] === "onsite" ? "On-site only — no full online option." : "Online only — no in-person step."}
-                  </p>
-                )}
-                </div>
-              </Section>
-
-              {/* 4 · References */}
-              <Section n={4} title="References">
+              {/* References */}
+              <Section title="References">
                 <ul className="space-y-2">
                   {d.refs.map((r) =>
                     r.url ? (
@@ -249,7 +291,7 @@ export function DetailSheet({
                           href={r.url}
                           target="_blank"
                           rel="noopener noreferrer"
-                          className="flex items-center justify-between gap-2 rounded-xl bg-mist px-3 py-2.5 text-sm font-bold text-navy hover:bg-sky"
+                          className="flex min-h-11 items-center justify-between gap-2 rounded-xl bg-mist px-3 py-2.5 text-sm font-bold text-navy transition-colors duration-[var(--dur-fast)] hover:bg-sky"
                         >
                           <span>{r.label}</span>
                           <ExternalLink className="size-4 shrink-0" aria-hidden="true" />
@@ -270,11 +312,11 @@ export function DetailSheet({
 
             <div className="border-t border-border bg-card p-4 pb-[max(1rem,env(safe-area-inset-bottom))]">
               {!signedIn ? (
-                <Button onClick={onSignUp} className="h-12 w-full bg-amber text-base font-bold text-navy hover:bg-amber/85">
+                <Button onClick={onSignUp} variant="cta" size="lg" className="w-full">
                   Create a free account to track this
                 </Button>
               ) : status === "locked" ? (
-                <Button disabled className="h-12 w-full text-base">
+                <Button disabled size="lg" className="w-full">
                   <Lock className="size-4" aria-hidden="true" /> Locked — get the prerequisites first
                 </Button>
               ) : (
@@ -283,9 +325,10 @@ export function DetailSheet({
                     <div className="flex gap-2">
                       <Button
                         variant="outline"
+                        size="md"
                         onClick={() => onToggleTrack(card.id)}
                         aria-pressed={tracking.includes(card.id)}
-                        className={`h-11 flex-1 border-2 text-sm font-bold ${tracking.includes(card.id) ? "border-civic bg-mist text-navy" : "border-civic text-civic"}`}
+                        className={`flex-1 border-2 ${tracking.includes(card.id) ? "border-civic bg-mist text-navy" : "border-civic text-civic"}`}
                       >
                         <Target className="size-4" aria-hidden="true" />
                         {tracking.includes(card.id) ? "Tracking" : "Track this ID"}
@@ -293,9 +336,10 @@ export function DetailSheet({
                       {tracking.includes(card.id) && (
                         <Button
                           variant="outline"
-                          disabled={priority === card.id}
-                          onClick={() => onSetPriority(card.id)}
-                          className="h-11 flex-1 border-2 border-amber text-sm font-bold text-navy disabled:opacity-100 disabled:bg-amber"
+                          size="md"
+                          aria-pressed={priority === card.id}
+                          onClick={() => { if (priority !== card.id) onSetPriority(card.id); }}
+                          className="flex-1 border-2 border-amber text-navy aria-pressed:bg-amber"
                         >
                           <Star className="size-4" aria-hidden="true" fill={priority === card.id ? "currentColor" : "none"} />
                           {priority === card.id ? "Priority" : "Make priority"}
@@ -308,10 +352,7 @@ export function DetailSheet({
                       Only one ID can be the priority — now <strong className="text-navy">{CARD_BY_ID[priority].short}</strong>. Making this one the priority replaces it.
                     </p>
                   )}
-                  <Button
-                    onClick={() => onToggle(card.id)}
-                    className={`h-12 w-full text-base font-bold ${status === "owned" ? "bg-muted text-navy hover:bg-mist" : "bg-amber text-navy hover:bg-amber/85"}`}
-                  >
+                  <Button onClick={() => onToggle(card.id)} variant={status === "owned" ? "outline" : "cta"} size="lg" className="w-full">
                     {status === "owned" ? "Undo — I don’t have this yet" : (<><Check className="size-5" aria-hidden="true" /> I have this ID</>)}
                   </Button>
                 </div>
@@ -324,13 +365,10 @@ export function DetailSheet({
   );
 }
 
-function Section({ n, title, children }: { n: number; title: string; children: React.ReactNode }) {
+function Section({ title, children }: { title: string; children: React.ReactNode }) {
   return (
     <section>
-      <h3 className="mb-3 flex items-center gap-2 text-base font-extrabold">
-        <span className="grid size-6 place-items-center rounded-full bg-navy text-xs font-bold text-white">{n}</span>
-        {title}
-      </h3>
+      <h3 className="mb-3 text-lg font-bold">{title}</h3>
       {children}
     </section>
   );
@@ -339,18 +377,18 @@ function Section({ n, title, children }: { n: number; title: string; children: R
 function Info({ label, children }: { label: string; children: React.ReactNode }) {
   return (
     <div>
-      <dt className="text-xs font-bold uppercase tracking-wide text-civic">{label}</dt>
+      <dt className="text-[13px] font-semibold text-civic">{label}</dt>
       <dd className="mt-0.5 leading-snug">{children}</dd>
     </div>
   );
 }
 
-function Tag({ ok, yes, no, icon }: { ok: boolean; yes: string; no: string; icon?: React.ReactNode }) {
+function FitTag({ ok, yes, no, icon }: { ok: boolean; yes: string; no: string; icon?: React.ReactNode }) {
   return (
-    <span className={`inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-xs font-bold ${ok ? "bg-mist text-navy" : "bg-muted text-muted-foreground"}`}>
+    <Pill tone={ok ? "mist" : "muted"} className="px-2.5">
       {icon}
       {ok ? yes : no}
-    </span>
+    </Pill>
   );
 }
 
@@ -367,34 +405,39 @@ function Steps({
   enabled: boolean;
   onToggle: (key: string) => void;
 }) {
+  const uid = useId();
   return (
     <ol className="mt-4 space-y-3">
       {steps.map((s, i) => {
         const key = stepKey(mode, i);
         const on = done.has(key);
+        const textId = `${uid}-${key}`;
         return (
           <li key={i} className="flex gap-3">
-            <button
-              type="button"
-              role="checkbox"
-              aria-checked={on}
-              aria-label={`Step ${i + 1}${on ? " done" : ""}`}
-              disabled={!enabled}
-              onClick={() => onToggle(key)}
-              className={`mt-0.5 grid size-7 shrink-0 place-items-center rounded-full text-sm font-bold ${
-                on ? "bg-amber text-navy" : "bg-civic text-white"
-              } disabled:cursor-not-allowed`}
+            {/* 28px disc with a 44px hit area (before: pseudo); the real checkbox is visually hidden. */}
+            <label
+              className={`focus-ring-within relative mt-0.5 grid size-7 shrink-0 place-items-center rounded-full text-sm font-bold transition-colors duration-[var(--dur-fast)] before:absolute before:-inset-2 before:content-[''] ${
+                on ? "bg-amber text-navy" : enabled ? "bg-civic text-white" : "bg-locked text-white"
+              } ${enabled ? "cursor-pointer" : "cursor-not-allowed"}`}
             >
+              <input
+                type="checkbox"
+                className="sr-only"
+                checked={on}
+                disabled={!enabled}
+                aria-labelledby={textId}
+                onChange={() => onToggle(key)}
+              />
               {on ? <Check className="size-4" strokeWidth={3} aria-hidden="true" /> : i + 1}
-            </button>
+            </label>
             <div className={`min-w-0 pt-0.5 text-[15px] leading-snug ${on ? "text-muted-foreground" : ""}`}>
-              <Rich text={s.t} />
+              <span id={textId}><Rich text={s.t} /></span>
               {s.link && (
                 <a
                   href={s.link.url}
                   target="_blank"
                   rel="noopener noreferrer"
-                  className="mt-1.5 flex w-fit items-center gap-1 rounded-lg bg-mist px-2.5 py-1.5 text-sm font-bold text-navy hover:bg-sky"
+                  className="mt-1.5 flex min-h-11 w-fit items-center gap-1 rounded-lg bg-mist px-2.5 py-1.5 text-sm font-bold text-navy transition-colors duration-[var(--dur-fast)] hover:bg-sky"
                 >
                   {s.link.label} <ExternalLink className="size-3.5" aria-hidden="true" />
                   <span className="sr-only">(opens in a new tab)</span>
@@ -410,16 +453,19 @@ function Steps({
 
 function PrepButton({ row, budget = false, onToggle }: { row: PrepRow; budget?: boolean; onToggle: () => void }) {
   return (
-    <button
-      type="button"
-      role="checkbox"
-      aria-checked={row.checked}
-      aria-disabled={row.auto}
-      onClick={() => !row.auto && onToggle()}
-      className={`flex w-full items-start gap-3 rounded-xl border-2 px-3 py-2.5 text-left transition-colors ${
+    <label
+      className={`focus-ring-within flex min-h-11 w-full items-start gap-3 rounded-xl border-2 px-3 py-2.5 text-left transition-[background-color,border-color,scale] duration-[var(--dur-fast)] ease-[var(--ease-out)] active:scale-[0.985] active:duration-[var(--dur-press)] ${
         row.checked ? "border-civic bg-mist" : "border-border bg-card hover:bg-muted"
-      } ${row.auto ? "cursor-default" : ""}`}
+      } ${row.auto ? "cursor-default" : "cursor-pointer"}`}
     >
+      {/* Native checkbox, visually hidden. Profile-ticked rows stay focusable but can't be changed here. */}
+      <input
+        type="checkbox"
+        className="sr-only"
+        checked={row.checked}
+        aria-disabled={row.auto || undefined}
+        onChange={() => { if (!row.auto) onToggle(); }}
+      />
       <span
         aria-hidden="true"
         className={`mt-0.5 grid size-5 shrink-0 place-items-center rounded-md border-2 ${
@@ -431,28 +477,20 @@ function PrepButton({ row, budget = false, onToggle }: { row: PrepRow; budget?: 
       <span className="min-w-0 leading-snug">
         {budget && <Wallet className="mr-1.5 -mt-0.5 inline size-4 text-navy" aria-hidden="true" />}
         <Rich text={row.text} />
-        {row.source === "profile" && <Pill>From your profile</Pill>}
-        {row.opt && <Pill>Only if needed</Pill>}
+        {row.source === "profile" && <Pill tone="navy" className="ml-2 align-middle">From your profile</Pill>}
+        {row.opt && <Pill tone="navy" className="ml-2 align-middle">Only if needed</Pill>}
       </span>
-    </button>
+    </label>
   );
-}
-
-function Pill({ children }: { children: React.ReactNode }) {
-  return <span className="ml-2 inline-block whitespace-nowrap rounded-full bg-navy px-2 py-0.5 align-middle text-[11px] font-bold text-white">{children}</span>;
 }
 
 function JumpChip({ card, owned, onJump }: { card: IdCard; owned: ReadonlySet<string>; onJump: (id: string) => void }) {
   const has = owned.has(card.id);
   return (
-    <button
-      type="button"
-      onClick={() => onJump(card.id)}
-      className={`inline-flex items-center gap-1 rounded-full px-3 py-1.5 text-sm font-semibold ${has ? "bg-amber text-navy" : "bg-white text-navy ring-1 ring-border hover:bg-mist"}`}
-    >
+    <Chip tone={has ? "have" : "outline"} onClick={() => onJump(card.id)}>
       {has && <Check className="size-3.5" strokeWidth={3} aria-hidden="true" />}
       {card.short}
-    </button>
+    </Chip>
   );
 }
 
@@ -464,15 +502,10 @@ function Chips({ label, ids, owned, onJump }: { label: string; ids: string[]; ow
         {ids.map((id) => {
           const has = owned.has(id);
           return (
-            <button
-              key={id}
-              type="button"
-              onClick={() => onJump(id)}
-              className={`inline-flex items-center gap-1 rounded-full px-3 py-1.5 text-sm font-semibold ${has ? "bg-amber text-navy" : "bg-mist text-navy hover:bg-sky"}`}
-            >
+            <Chip key={id} tone={has ? "have" : "mist"} onClick={() => onJump(id)}>
               {has && <Check className="size-3.5" strokeWidth={3} aria-hidden="true" />}
               {CARD_BY_ID[id].short}
-            </button>
+            </Chip>
           );
         })}
       </div>

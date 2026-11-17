@@ -34,11 +34,11 @@ export function Onboarding({
     });
 
   return (
-    <main className="mx-auto flex min-h-dvh w-full max-w-md flex-col">
+    <main id="main" tabIndex={-1} className="mx-auto flex min-h-dvh w-full max-w-md flex-col outline-none">
       <div className="flex-1 space-y-8 px-5 pb-32 pt-6">
         <div>
           <Logo dark />
-          <h1 className="mt-5 text-2xl font-extrabold tracking-tight">
+          <h1 className="mt-5 text-2xl font-bold leading-tight tracking-tight">
             {editing ? "Update your checklist" : `Kumusta, ${me.name.split(" ")[0]}!`}
           </h1>
           <p className="mt-1 text-muted-foreground">
@@ -47,19 +47,19 @@ export function Onboarding({
         </div>
 
         <section aria-labelledby="have">
-          <h2 id="have" className="text-lg font-extrabold">1 · What do you already have?</h2>
+          <h2 id="have" className="text-lg font-bold">What do you already have?</h2>
           <p className="mb-3 text-sm text-muted-foreground">Tick everything you currently hold.</p>
           <div className="space-y-5">
             {TIERS.map((t) => (
               <fieldset key={t}>
-                <legend className="mb-2 text-xs font-bold uppercase tracking-wider text-civic">{TIER_META[t].label}</legend>
+                <legend className="mb-2 text-[13px] font-semibold text-civic">{TIER_META[t].label}</legend>
                 <ul className="space-y-2">
                   {CARDS.filter((c) => c.tier === t).map((c) => (
                     <li key={c.id}>
                       <Row
-                        role="checkbox"
+                        type="checkbox"
                         checked={owned.has(c.id)}
-                        onClick={() => toggle(c.id)}
+                        onChange={() => toggle(c.id)}
                         icon={<CardIcon name={c.icon} className="size-5" />}
                         label={c.name}
                       />
@@ -72,41 +72,34 @@ export function Onboarding({
         </section>
 
         <section aria-labelledby="budget">
-          <h2 id="budget" className="text-lg font-extrabold">2 · What’s your budget per ID?</h2>
+          <h2 id="budget" className="text-lg font-bold">What’s your budget per ID?</h2>
           <p className="mb-3 text-sm text-muted-foreground">We’ll flag IDs that fit.</p>
-          <ul className="space-y-2" role="radiogroup" aria-labelledby="budget">
+          <div className="space-y-2" role="radiogroup" aria-labelledby="budget">
             {BUDGETS.map((b) => (
-              <li key={b.id}>
-                <Row role="radio" checked={budget === b.id} onClick={() => setBudget(b.id)} label={b.label} hint={b.hint} />
-              </li>
+              <Row key={b.id} type="radio" name="budget" checked={budget === b.id} onChange={() => setBudget(b.id)} label={b.label} hint={b.hint} />
             ))}
-          </ul>
+          </div>
         </section>
 
         <section aria-labelledby="setup">
-          <h2 id="setup" className="text-lg font-extrabold">3 · How do you prefer to apply?</h2>
+          <h2 id="setup" className="text-lg font-bold">How do you prefer to apply?</h2>
           <p className="mb-3 text-sm text-muted-foreground">Some IDs can only be done in person.</p>
-          <ul className="space-y-2" role="radiogroup" aria-labelledby="setup">
+          <div className="space-y-2" role="radiogroup" aria-labelledby="setup">
             {SETUPS.map((s) => (
-              <li key={s.id}>
-                <Row role="radio" checked={setup === s.id} onClick={() => setSetup(s.id)} label={s.label} hint={s.hint} />
-              </li>
+              <Row key={s.id} type="radio" name="setup" checked={setup === s.id} onChange={() => setSetup(s.id)} label={s.label} hint={s.hint} />
             ))}
-          </ul>
+          </div>
         </section>
       </div>
 
-      <div className="fixed inset-x-0 bottom-0 z-10 border-t border-border bg-background/95 p-4 pb-[max(1rem,env(safe-area-inset-bottom))] backdrop-blur">
+      <div className="fixed inset-x-0 bottom-0 z-10 border-t border-border bg-background p-4 pb-[max(1rem,env(safe-area-inset-bottom))]">
         <div className="mx-auto flex max-w-md gap-3">
           {editing && (
-            <Button variant="outline" onClick={onCancel} className="h-14 rounded-2xl px-5 text-base font-bold">
+            <Button variant="outline" size="xl" onClick={onCancel}>
               Cancel
             </Button>
           )}
-          <Button
-            onClick={() => onSave({ owned: [...owned], budget, setup })}
-            className="h-14 flex-1 rounded-2xl bg-amber text-base font-bold text-navy hover:bg-amber/85"
-          >
+          <Button variant="cta" size="xl" onClick={() => onSave({ owned: [...owned], budget, setup })} className="flex-1">
             {editing ? "Save changes" : `Show my path · ${owned.size} selected`}
           </Button>
         </div>
@@ -115,44 +108,47 @@ export function Onboarding({
   );
 }
 
+/**
+ * A big tappable row backed by a real, visually hidden <input>: native keyboard behaviour
+ * (Space toggles; arrow keys move within a radio group) and native screen reader semantics.
+ */
 function Row({
-  role,
+  type,
+  name,
   checked,
-  onClick,
+  onChange,
   label,
   hint,
   icon,
 }: {
-  role: "checkbox" | "radio";
+  type: "checkbox" | "radio";
+  name?: string;
   checked: boolean;
-  onClick: () => void;
+  onChange: () => void;
   label: string;
   hint?: string;
   icon?: React.ReactNode;
 }) {
   return (
-    <button
-      type="button"
-      role={role}
-      aria-checked={checked}
-      onClick={onClick}
-      className={`flex min-h-14 w-full items-center gap-3 rounded-2xl border-2 px-4 py-3 text-left transition-colors ${
+    <label
+      className={`focus-ring-within flex min-h-14 w-full cursor-pointer items-center gap-3 rounded-2xl border-2 px-4 py-3 text-left transition-[background-color,border-color,scale] duration-[var(--dur-fast)] ease-[var(--ease-out)] active:scale-[0.985] active:duration-[var(--dur-press)] ${
         checked ? "border-civic bg-mist" : "border-border bg-card hover:bg-muted"
       }`}
     >
+      <input type={type} name={name} checked={checked} onChange={onChange} className="sr-only" />
       <span
         aria-hidden="true"
-        className={`grid size-6 shrink-0 place-items-center border-2 ${role === "radio" ? "rounded-full" : "rounded-md"} ${
+        className={`grid size-6 shrink-0 place-items-center border-2 ${type === "radio" ? "rounded-full" : "rounded-md"} ${
           checked ? "border-civic bg-civic text-white" : "border-input bg-card"
         }`}
       >
-        {checked && (role === "radio" ? <span className="size-2.5 rounded-full bg-white" /> : <Check className="size-4" strokeWidth={3} />)}
+        {checked && (type === "radio" ? <span className="size-2.5 rounded-full bg-white" /> : <Check className="size-4" strokeWidth={3} />)}
       </span>
       {icon && <span className="text-civic">{icon}</span>}
       <span className="min-w-0">
-        <span className="block text-[15px] font-bold leading-snug">{label}</span>
+        <span className="block text-[15px] font-semibold leading-snug">{label}</span>
         {hint && <span className="block text-sm text-muted-foreground">{hint}</span>}
       </span>
-    </button>
+    </label>
   );
 }
