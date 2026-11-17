@@ -1,266 +1,401 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
 import {
   Background,
   BackgroundVariant,
   Controls,
   Handle,
+  MarkerType,
   Position,
   ReactFlow,
+  useNodesInitialized,
+  useReactFlow,
   type Edge,
   type Node,
   type NodeProps,
 } from "@xyflow/react";
-import { CARDS, CARD_BY_ID, TIER_META, type IdCard, type Tier } from "@/data/cards";
-import { layoutTree, leadsTo, NODE_H, NODE_W, ROW_GAP, rowY, statusOf, type NodeStatus } from "@/lib/tree";
-import { Pill, type PillTone } from "@/components/ui/pill";
+import { Star } from "lucide-react";
+import { Pill } from "@/components/ui/pill";
+import {
+  layoutTree,
+  NODE_W,
+  statusOf,
+  type ReadinessContext,
+  type TreeCard,
+} from "@/lib/tree";
+import type { AcquisitionPlan } from "@/lib/planner/types";
+import type {
+  NodeAssessment,
+  TreeNodeStatus,
+} from "@/lib/planner/recommendations";
+import { TREE_STATUS_LABELS } from "@/lib/tree-status";
 import { NodeCircle } from "./NodeCircle";
 
-const HANDLE = "!size-1 !min-h-0 !min-w-0 !border-0 !bg-transparent !opacity-0 !pointer-events-none";
+const HANDLE =
+  "!size-1 !min-h-0 !min-w-0 !border-0 !bg-transparent !opacity-0 !pointer-events-none";
 
-/** How a node relates to the selected ID: what it needs from it / gives to it. */
-type Rel = { needs?: "all" | "any" | "optional"; leads?: "main" | "optional" };
+/** Darker amber for lines that carry an owned document (plain amber is under 3:1 on the light canvas). */
+const FLOW_VARS = {
+  "--edge-owned":
+    "color-mix(in srgb, var(--color-amber) 70%, var(--color-navy))",
+} as CSSProperties;
 
 type IdNodeData = {
-  card: IdCard;
-  status: NodeStatus;
+  card: TreeCard;
+  status: TreeNodeStatus;
   selected: boolean;
   dim: boolean;
-  rel: Rel | null;
-  /** The one node that pulses: the priority ID, else the lowest-tier ID that is ready. */
+  recommended: boolean;
+  path: boolean;
+  /** The one node that pulses: the priority ID, else the first suggested ID. */
   pulse: boolean;
-  /** Fresh start (nothing owned yet): marks where to begin. */
+  /** Nothing owned yet: marks where to begin (replaces the "Suggested next" pill on that node). */
   startHere: boolean;
   onSelect: (id: string) => void;
-};
-
-function relPills(rel: Rel | null) {
-  const out: { label: string; tone: PillTone; cls?: string }[] = [];
-  if (rel?.needs === "all") out.push({ label: "Required", tone: "navy" });
-  if (rel?.needs === "any") out.push({ label: "Pick one", tone: "navy" });
-  if (rel?.needs === "optional") out.push({ label: "Optional", tone: "mist", cls: "ring-1 ring-navy/30" });
-  if (rel?.leads === "main") out.push({ label: "Leads to", tone: "civic" });
-  if (rel?.leads === "optional") out.push({ label: "May ask for it", tone: "mist", cls: "ring-1 ring-civic/40" });
-  return out;
-}
-type TierNodeData = { tier: Tier };
-
-export const STATUS_LABEL: Record<NodeStatus, string> = {
-  owned: "You have this",
-  available: "Ready to get",
-  locked: "Locked",
+  onEdit: () => void;
 };
 
 function IdNode({ data }: NodeProps<Node<IdNodeData, "id">>) {
-  const { card, status, selected, dim, rel, pulse, startHere, onSelect } = data;
-  const pills = relPills(rel);
+  const {
+    card,
+    status,
+    selected,
+    dim,
+    recommended,
+    path,
+    pulse,
+    startHere,
+    onSelect,
+    onEdit,
+  } = data;
 
-  // One-shot feedback when this ID's status changes while it is on screen.
-  // Compared during render (no effect): "got" = you just marked it, "unlock" = it just became ready.
+  // One-shot feedback when you mark this ID as owned while the tree is on screen.
+  // Compared during render (no effect). Only "got" is animated: other statuses can change when the
+  // planner's assessment arrives, which must not look like something the user did.
   const [prevStatus, setPrevStatus] = useState(status);
-  const [anim, setAnim] = useState<"got" | "unlock" | null>(null);
+  const [got, setGot] = useState(false);
   if (prevStatus !== status) {
     setPrevStatus(status);
-    setAnim(status === "owned" ? "got" : prevStatus === "locked" && status === "available" ? "unlock" : null);
+    setGot(status === "owned");
   }
 
-  const motion = [
-    pulse || anim === "unlock" ? "pulse-ring" : "",
-    anim === "unlock" && !pulse ? "pulse-once" : "",
-    anim === "got" ? "node-got" : "",
-  ].join(" ");
+  const ring = selected
+    ? "ring-4 ring-navy ring-offset-2 ring-offset-background"
+    : path
+      ? "ring-2 ring-civic ring-offset-2 ring-offset-background"
+      : recommended
+        ? "ring-2 ring-amber ring-offset-2 ring-offset-background"
+        : "";
 
   return (
-    <div style={{ width: NODE_W }} className={`flex flex-col items-center transition-opacity duration-[var(--dur-base)] ${dim ? "opacity-20 grayscale" : ""}`}>
+    <div
+      style={{ width: NODE_W }}
+      className={`flex flex-col items-center transition-opacity duration-[var(--dur-base)] ${dim ? "opacity-25" : ""}`}
+    >
       <button
         type="button"
-        onClick={() => onSelect(card.id)}
-        aria-label={`${card.name}. ${STATUS_LABEL[status]}.${startHere ? " Start here." : ""} Open details.`}
+        onClick={() => (card.inventoryOnly ? onEdit() : onSelect(card.id))}
         data-card-id={card.id}
-        className="group flex flex-col items-center gap-1.5 rounded-2xl p-1 outline-offset-2"
+        aria-label={`${card.name}. ${TREE_STATUS_LABELS[status]}.${recommended ? " Recommended next." : ""}${startHere ? " Start here." : ""}${path ? " In selected route." : ""} ${card.inventoryOnly ? "Edit inventory." : "Open guide."}`}
+        className="group flex w-full flex-col items-center gap-1.5 rounded-2xl p-1 outline-offset-2"
       >
         <NodeCircle
           status={status}
           icon={card.icon}
-          onAnimationEnd={() => setAnim(null)}
-          className={`group-hover:scale-[1.04] group-active:scale-[0.96] ${motion} ${
-            selected ? "ring-4 ring-navy ring-offset-2 ring-offset-background" : ""
-          }`}
+          onAnimationEnd={() => setGot(false)}
+          className={`group-hover:scale-[1.04] group-active:scale-[0.96] ${pulse ? "pulse-ring" : ""} ${got ? "node-got" : ""} ${ring}`}
         >
-          <Handle type="source" position={Position.Top} className={HANDLE} />
-          <Handle type="target" position={Position.Bottom} className={HANDLE} />
-          <Handle id="r" type="source" position={Position.Right} className={HANDLE} />
-          <Handle id="ls" type="source" position={Position.Left} className={HANDLE} />
-          <Handle id="l" type="target" position={Position.Left} className={HANDLE} />
-          <Handle id="rt" type="target" position={Position.Right} className={HANDLE} />
+          <Handle
+            id="top-source"
+            type="source"
+            position={Position.Top}
+            className={HANDLE}
+          />
+          <Handle
+            id="bottom-target"
+            type="target"
+            position={Position.Bottom}
+            className={HANDLE}
+          />
+          <Handle
+            id="right-source"
+            type="source"
+            position={Position.Right}
+            className={HANDLE}
+          />
+          <Handle
+            id="left-target"
+            type="target"
+            position={Position.Left}
+            className={HANDLE}
+          />
+          <Handle
+            id="left-source"
+            type="source"
+            position={Position.Left}
+            className={HANDLE}
+          />
+          <Handle
+            id="right-target"
+            type="target"
+            position={Position.Right}
+            className={HANDLE}
+          />
+          <Handle
+            id="bottom-source"
+            type="source"
+            position={Position.Bottom}
+            className={HANDLE}
+          />
+          <Handle
+            id="top-target"
+            type="target"
+            position={Position.Top}
+            className={HANDLE}
+          />
         </NodeCircle>
-        <span
-          className={`max-w-[104px] text-balance rounded-md bg-background px-1.5 py-0.5 text-center text-[13px] font-semibold leading-tight ${
-            status === "locked" ? "text-locked" : "text-navy"
-          }`}
-        >
+        <span className="max-w-[132px] rounded-md bg-background px-1.5 py-0.5 text-center text-[13px] font-semibold leading-tight text-navy">
           {card.short}
         </span>
-        {startHere && <Pill tone="navy">Start here</Pill>}
-        {pills.map((p) => (
-          <Pill key={p.label} tone={p.tone} className={p.cls}>
-            {p.label}
-          </Pill>
-        ))}
+        <span className="rounded-md bg-background px-1 text-xs font-semibold text-muted-foreground">
+          {TREE_STATUS_LABELS[status]}
+        </span>
+        {startHere ? (
+          <Pill tone="navy">Start here</Pill>
+        ) : (
+          recommended && (
+            <Pill tone="amber">
+              <Star className="size-3" aria-hidden="true" />
+              Suggested next
+            </Pill>
+          )
+        )}
+        {selected && <Pill tone="navy">Selected goal</Pill>}
+        {card.inventoryOnly && (
+          <span className="text-xs font-semibold">Inventory evidence</span>
+        )}
       </button>
     </div>
   );
 }
-
-function TierNode({ data }: NodeProps<Node<TierNodeData, "tier">>) {
-  const meta = TIER_META[data.tier];
-  return (
-    <div className="pointer-events-none flex w-[260px] flex-col items-start">
-      <Pill tone="mist" className="px-3 py-1.5">
-        {meta.label}
-      </Pill>
-    </div>
-  );
-}
-
-/** Same-tier links run sideways, leaving whichever side faces the target. */
-function sideHandles(sourceX: number, targetX: number) {
-  return targetX >= sourceX ? { sourceHandle: "r", targetHandle: "l" } : { sourceHandle: "ls", targetHandle: "rt" };
-}
-
-const nodeTypes = { id: IdNode, tier: TierNode };
+const nodeTypes = { id: IdNode };
 
 export function SkillTree({
   owned,
+  context,
   selectedId,
   onSelect,
   onClear,
+  onEdit,
   matchIds,
+  assessments,
+  recommendedIds,
+  plan,
   priorityId = null,
 }: {
   owned: ReadonlySet<string>;
+  context: ReadinessContext;
   selectedId: string | null;
   onSelect: (id: string) => void;
   onClear: () => void;
-  /** When set, IDs outside this set are dimmed (tree filter). */
+  onEdit: () => void;
   matchIds: ReadonlySet<string> | null;
-  /** The user's priority ID: the view opens on it and it is the node that pulses. */
+  assessments?: Record<string, NodeAssessment>;
+  recommendedIds: string[];
+  plan?: AcquisitionPlan;
+  /** The user's priority ID: the view opens on it and it is the node that pulses (while it is ready). */
   priorityId?: string | null;
 }) {
-  const layout = useMemo(() => layoutTree(), []);
-  const xOf = useMemo(() => Object.fromEntries(layout.placed.map((p) => [p.card.id, p.x])), [layout]);
-
-  // Lowest-tier ID that can be started right now (CARDS order breaks ties, so the PSA comes first).
-  const firstReady = useMemo(
-    () => CARDS.filter((c) => statusOf(c, owned) === "available").sort((a, b) => a.tier - b.tier)[0] ?? null,
-    [owned],
+  const layout = useMemo(() => layoutTree(plan), [plan]);
+  const pathIds = useMemo(
+    () =>
+      new Set([
+        ...layout.pathEdges.flatMap((e) => [e.source, e.target]),
+        ...(plan?.steps.map((s) => s.id) ?? []),
+      ]),
+    [layout, plan],
   );
-  const priority = priorityId ? (CARD_BY_ID[priorityId] ?? null) : null;
-  // Only one node pulses: the priority ID while it is still ready, otherwise the first ready one.
-  const pulseId = priority && statusOf(priority, owned) === "available" ? priority.id : (firstReady?.id ?? null);
-  const startHereId = owned.size === 0 ? "psa" : null;
-
-  // How every other ID relates to the selected one (drives the badges and the fade).
-  const rels = useMemo(() => {
-    const map: Record<string, Rel> = {};
-    if (!selectedId) return map;
-    const sel = CARD_BY_ID[selectedId];
-    for (const id of sel.all ?? []) map[id] = { ...map[id], needs: "all" };
-    for (const id of sel.any ?? []) if (!map[id]) map[id] = { needs: "any" };
-    for (const id of sel.optional ?? []) if (!map[id]) map[id] = { needs: "optional" };
-    for (const { card, kind } of leadsTo(selectedId))
-      map[card.id] = { ...map[card.id], leads: kind === "optional" ? "optional" : "main" };
-    return map;
-  }, [selectedId]);
-
-  const nodes = useMemo<Node[]>(() => {
-    const idNodes: Node[] = layout.placed.map((p) => ({
-      id: p.card.id,
-      type: "id",
-      position: { x: p.x, y: p.y },
-      draggable: false,
-      data: {
-        card: p.card,
-        status: statusOf(p.card, owned),
-        selected: selectedId === p.card.id,
-        dim: (!!matchIds && !matchIds.has(p.card.id)) || (!!selectedId && selectedId !== p.card.id && !rels[p.card.id]),
-        rel: rels[p.card.id] ?? null,
-        pulse: pulseId === p.card.id,
-        startHere: startHereId === p.card.id,
-        onSelect,
-      },
-    }));
-    const tierNodes: Node[] = ([0, 1, 2, 3] as Tier[]).map((t) => ({
-      id: `tier-${t}`,
-      type: "tier",
-      position: { x: 6, y: rowY(t) - 46 },
-      draggable: false,
-      selectable: false,
-      focusable: false,
-      zIndex: -1,
-      data: { tier: t },
-    }));
-    return [...tierNodes, ...idNodes];
-  }, [layout, owned, selectedId, onSelect, matchIds, rels, pulseId, startHereId]);
-
+  const recommendations = useMemo(
+    () => new Set(recommendedIds),
+    [recommendedIds],
+  );
+  // Only one node pulses: the priority ID while its requirements are ready, else the first suggestion.
+  const priorityReady =
+    !!priorityId && assessments?.[priorityId]?.status === "available";
+  const pulseId = selectedId
+    ? null
+    : priorityReady
+      ? priorityId
+      : (recommendedIds[0] ?? null);
+  const startHereId = owned.size === 0 && !selectedId ? pulseId : null;
+  const nodes = useMemo<Node[]>(
+    () =>
+      layout.placed.map((p) => {
+        const fallback = p.card.inventoryOnly
+          ? owned.has(p.card.id)
+            ? "owned"
+            : "confirmation"
+          : statusOf(p.card, owned, context);
+        return {
+          id: p.card.id,
+          type: "id",
+          position: { x: p.x, y: p.y },
+          draggable: false,
+          data: {
+            card: p.card,
+            status:
+              assessments?.[p.card.id]?.status ??
+              (fallback === "locked" ? "preparation" : fallback),
+            selected: selectedId === p.card.id,
+            dim:
+              (!!selectedId &&
+                selectedId !== p.card.id &&
+                !pathIds.has(p.card.id)) ||
+              (!!matchIds &&
+                !matchIds.has(p.card.id) &&
+                !pathIds.has(p.card.id)),
+            recommended: !selectedId && recommendations.has(p.card.id),
+            path: pathIds.has(p.card.id),
+            pulse: pulseId === p.card.id,
+            startHere: startHereId === p.card.id,
+            onSelect,
+            onEdit,
+          },
+        };
+      }),
+    [
+      layout,
+      owned,
+      context,
+      assessments,
+      selectedId,
+      pathIds,
+      recommendations,
+      matchIds,
+      pulseId,
+      startHereId,
+      onSelect,
+      onEdit,
+    ],
+  );
   const edges = useMemo<Edge[]>(() => {
-    const base: Edge[] = layout.edges.map((e) => {
-      const src = owned.has(e.source);
-      const tgtStatus = statusOf(CARD_BY_ID[e.target], owned);
-      const lit = src && tgtStatus === "owned";
-      const open = src && tgtStatus === "available";
-      const inFocus = (id: string) => id === selectedId || !!rels[id];
-      const faded =
-        (!!matchIds && (!matchIds.has(e.source) || !matchIds.has(e.target))) ||
-        (!!selectedId && !(inFocus(e.source) && inFocus(e.target)));
+    const positions = new Map(layout.placed.map((p) => [p.card.id, p]));
+    const chosen =
+      selectedId && plan ? layout.pathEdges : selectedId ? [] : layout.edges;
+    return chosen.map((edge) => {
+      const source = positions.get(edge.source)!;
+      const target = positions.get(edge.target)!;
+      const sideways = Math.abs(source.y - target.y) < 30;
+      const handles = sideways
+        ? source.x < target.x
+          ? { sourceHandle: "right-source", targetHandle: "left-target" }
+          : { sourceHandle: "left-source", targetHandle: "right-target" }
+        : source.y > target.y
+          ? { sourceHandle: "top-source", targetHandle: "bottom-target" }
+          : { sourceHandle: "bottom-source", targetHandle: "top-target" };
+      const inPath = !!selectedId && !!plan;
+      const inputCount = chosen.filter((e) => e.target === edge.target).length;
+      const label = inPath
+        ? edge.kind === "optional"
+          ? "Needs confirmation"
+          : inputCount > 1
+            ? "AND"
+            : "Selected route"
+        : undefined;
+      const color = inPath
+        ? owned.has(edge.source)
+          ? "var(--edge-owned)"
+          : "var(--color-civic)"
+        : "var(--locked-line)";
+      // Overview only: the line into the pulsing node marches for 3 loops, then rests.
+      const flows = !selectedId && edge.target === pulseId;
       return {
-        id: e.id,
-        source: e.source,
-        target: e.target,
-        type: "straight",
-        ...(e.side ? sideHandles(xOf[e.source], xOf[e.target]) : {}),
-        // Only the line leading into the pulsing node marches (3 loops), not every open edge.
-        className: open && e.target === pulseId ? "edge-flow-active" : undefined,
+        id: edge.id,
+        source: edge.source,
+        target: edge.target,
+        ...handles,
+        type: "default",
+        label,
+        className: flows ? "edge-flow-active" : undefined,
+        labelStyle: { fontSize: 12, fill: "var(--color-navy)" },
+        labelBgStyle: { fill: "var(--background)" },
+        labelBgPadding: [5, 3],
+        markerEnd: { type: MarkerType.ArrowClosed, color },
         style: {
-          stroke: lit ? "var(--color-amber)" : open ? "var(--color-civic)" : "var(--locked-line)",
-          strokeOpacity: faded ? 0.12 : 1,
-          strokeWidth: lit ? 3 : 2,
-          strokeDasharray: open ? "8 6" : undefined,
+          stroke: color,
+          strokeWidth: inPath ? 3 : 1.5,
+          strokeOpacity: inPath ? 1 : 0.85,
+          strokeDasharray: flows
+            ? "8 6"
+            : !inPath || edge.kind === "optional"
+              ? "5 5"
+              : undefined,
         },
       };
     });
-    return base;
-  }, [layout, owned, xOf, matchIds, selectedId, rels, pulseId]);
-
+  }, [layout, selectedId, plan, owned, pulseId]);
+  const rf = useReactFlow();
+  const initialized = useNodesInitialized();
+  const lastFocus = useRef("");
+  const overviewTarget = priorityId ?? recommendedIds[0] ?? "starter";
+  const focusKey = `${selectedId ?? "overview"}:${selectedId ? layout.pathEdges.map((e) => e.id).join() : overviewTarget}`;
+  useEffect(() => {
+    if (!initialized || lastFocus.current === focusKey) return;
+    const timer = requestAnimationFrame(() => {
+      lastFocus.current = focusKey;
+      if (selectedId)
+        void rf.fitView({
+          nodes: [...new Set([selectedId, ...pathIds])].map((id) => ({ id })),
+          padding: { top: "64px", bottom: "48px", left: "12%", right: "12%" },
+          maxZoom: 0.9,
+          minZoom: 0.2,
+          duration: 250,
+        });
+      else {
+        // Open where the next step is: priority ID, else the first suggestion, else the default starter.
+        const target =
+          layout.placed.find((p) => p.card.id === priorityId) ??
+          layout.placed.find((p) => p.card.id === recommendedIds[0]) ??
+          layout.placed.find((p) => p.card.id === "barangay-id")!;
+        void rf.setCenter(target.x + NODE_W / 2, target.y + 80, {
+          zoom: 0.85,
+          duration: 250,
+        });
+      }
+    });
+    return () => cancelAnimationFrame(timer);
+  }, [
+    initialized,
+    focusKey,
+    rf,
+    selectedId,
+    pathIds,
+    layout,
+    recommendedIds,
+    priorityId,
+  ]);
   return (
     <ReactFlow
       nodes={nodes}
       edges={edges}
       nodeTypes={nodeTypes}
-      onInit={(rf) => {
-        // Open where the user's next step is: priority ID, else the lowest-tier ready ID, else the PSA.
-        const targetId = priority?.id ?? firstReady?.id ?? "psa";
-        const target = layout.placed.find((p) => p.card.id === targetId);
-        const x = target ? target.x + NODE_W / 2 : layout.width / 2;
-        // Sit the node in the lower half so the IDs it unlocks are visible above it.
-        const y = target ? target.y + NODE_H / 2 - ROW_GAP * 0.75 : rowY(1) + 40;
-        rf.setCenter(x, y, { zoom: 0.8 });
-      }}
-      translateExtent={[[-80, -60], [layout.width + 80, layout.height + 60]]}
-      fitViewOptions={{ padding: 0.04 }}
-      minZoom={0.4}
-      maxZoom={1.4}
+      minZoom={0.18}
+      maxZoom={1.5}
       onPaneClick={onClear}
       nodesDraggable={false}
       nodesConnectable={false}
-      // selectable keeps React Flow from setting pointer-events:none on the node (our nodes hold real buttons)
       elementsSelectable
       zoomOnDoubleClick={false}
-      proOptions={{ hideAttribution: true }}
-      aria-label="Government ID path"
+      style={FLOW_VARS}
+      aria-label="ID and document skill tree"
     >
-      <Background variant={BackgroundVariant.Dots} gap={26} size={1.4} color="color-mix(in srgb, var(--color-navy) 14%, transparent)" />
+      <Background
+        variant={BackgroundVariant.Dots}
+        gap={26}
+        size={1.4}
+        color="color-mix(in srgb, var(--color-navy) 14%, transparent)"
+      />
       <Controls showInteractive={false} position="bottom-right" />
     </ReactFlow>
   );

@@ -1,12 +1,14 @@
 "use client";
 
-import { FilterBar, type Filters } from "./FilterBar";
+import type { ComponentProps } from "react";
+import { FilterBar } from "./FilterBar";
 
 /**
- * In-flow bar above the skill-tree canvas: legend on the left, Filter on the right.
- * Replaces the floating Legend + Filter that used to sit on top of the nodes.
+ * In-flow bar above the skill-tree canvas: legend on the left, Groups + Filter on the right.
+ * Every prop goes straight to FilterBar. The legend stays on one row at 375px (even with the filter badge);
+ * at 320px it may wrap, but it never overlaps the buttons.
  */
-export function TreeToolbar({ filters, onChange }: { filters: Filters; onChange: (f: Filters) => void }) {
+export function TreeToolbar(props: ComponentProps<typeof FilterBar>) {
   return (
     <div className="relative z-20 flex min-h-12 shrink-0 items-center justify-between gap-2 border-b border-border bg-background px-2.5 py-0.5">
       <ul aria-label="Legend" className="flex min-w-0 flex-wrap items-center gap-x-1.5 gap-y-1 py-1 text-xs font-semibold text-navy">
@@ -20,7 +22,7 @@ export function TreeToolbar({ filters, onChange }: { filters: Filters; onChange:
           <span aria-hidden="true" className="size-3 shrink-0 rounded-full border-2 border-dashed border-locked-line bg-white" /> Locked
         </li>
       </ul>
-      <FilterBar filters={filters} onChange={onChange} />
+      <FilterBar {...props} />
     </div>
   );
 }

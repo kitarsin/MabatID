@@ -668,3 +668,35 @@ Palette, logo mark, node status language, button copy ("Log in or register", "Pr
 - Filters, search text and the tree highlight are not in the URL (out of scope for D6).
 
 **Still not verified:** real touch device, screen reader, the Progress-row "push tree then id" path by hand.
+
+---
+
+## 15. Merge with the collaborator's work (origin/main 06c5455)
+
+**What came in** (Ian Villaraza, 2 commits): personalized skill-tree paths replacing fixed tiers, acquisition planner (`lib/planner/*`, `/api/plans/*` routes), new data model (`CredentialGroup`, `CardKind`), facts/documents/eligibility, device-profile auth (no passwords), TreeAdvisor, AcquisitionPlan, 72 tests (`npm test`, new `tsx` dev dependency).
+
+**How it was merged:** 11 files conflicted (~74 hunks). Rule: **their logic, data model, props and copy win; our design/a11y/route/tab-bar work is re-applied on top.** Their side was taken per file and our changes re-applied from per-file patches by two `frontend-dev` threads; the critic ran the checks.
+
+**Result:** `tsc` clean · `eslint` clean · **72/72 tests pass** · `next build` passes (`/` static, `/api/plans/*` dynamic).
+
+**Critic fixes during the merge**
+1. `route.ts`: only `progress` is guarded for guests; their guests may open `?v=edit` (edit starting point). Verified: guest `?v=edit` shows "Update your checklist" with native radios.
+2. `App.tsx`: root now `overflow-hidden`. Their FilterBar renders two closed popovers (invisible, 533px tall); they extended the document scroll to 970px so the page itself could scroll. Verified `scrollHeight == innerHeight` at 375×812 and 768×900.
+3. `AcquisitionPlan.tsx`: `<small>` defaulted to 11.2px; now `text-xs`.
+
+**Adapted because of their data model**
+- Tiers → credential groups everywhere (Browse headings, filter chips, progress). Hero path is PSA → Barangay Clearance → Postal ID, read from their overview `parent` links.
+- Tree node statuses are theirs (`owned`, `available`, `preparation`, `confirmation`, `ineligible`, `unresolved`); NodeCircle was rewritten for them. "Start here" / single pulse / `node-got` kept; the unlock pulse was dropped (statuses change asynchronously when the assessment arrives).
+- Auth: their device-profile flow (name + age, no password) replaced our tabs/password/show-password; our aria-invalid/describedby/focus-on-error and Button variants kept.
+- Detail sheet: their structure (plan, eligibility, requirements, steps, acceptance, notes) kept; our close button, status pill, no dimming, native checkboxes, `finalFocus`. "Unlock by getting" dropped (`unlockHint` no longer exists; the acquisition plan covers it).
+- Copy: theirs wins (h1 "IDs & documents", "Open device profile", "Free · No profile needed to preview", etc.).
+
+**Verified in the merged app** (375×812, 768×900): landing (hero path, D1 order, one screen), tree (single `main`, tab bar, rail at 768), sheet (white 44px close, no dimmed elements, headings), Browse (21 cards, search attrs, title), guest edit, auth screen, no console errors/hydration warnings, no page scroll.
+
+**Known issues / follow-ups**
+1. **Tree space at 375px:** header 60 + preview banner 56 + TreeAdvisor 269 (cap 40dvh) + toolbar 49 + tab bar 63 leaves a **315px canvas** at 812px tall and ~170px at 667px. Make the advisor collapsible (default collapsed on narrow screens) or shrink the preview banner.
+2. **Legend wraps to 2 rows at 375px** (their new Groups icon button + Filter). Also the 3-item legend (Obtained / Ready to get / Locked) no longer matches their six statuses; replace it with a "Tree key" popover.
+3. **Focus return on sheet close not re-verified** after the merge (the browser window was hidden, so animation frames stalled). The code path (`finalFocus` + `data-card-id`) is unchanged and was verified before the merge.
+4. Edge arrowheads use CSS variables for colour (`--edge-owned`); confirm they render in a visible browser.
+5. Rail label "Browse IDs & documents" wraps to 3 lines in the 80px rail.
+6. Real screen reader, touch device and OS reduced-motion still untested.

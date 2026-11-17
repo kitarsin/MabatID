@@ -1,15 +1,5 @@
 "use client";
 
-/**
- * Front-end-only account + progress store.
- *
- * Everything lives in this browser's localStorage so the UI can be built and
- * tested before the backend exists. The shape (User, owned[]) is what the API
- * should eventually return — swap the bodies of register/login/toggleOwned for
- * fetch calls and the screens won't need to change.
- * NOT real security: passwords are only salted-hashed locally for the demo.
- */
-
 import {
   createContext,
   useCallback,
@@ -19,209 +9,283 @@ import {
   useState,
   type ReactNode,
 } from "react";
+import type { FactId } from "@/data/facts";
+import { CARDS } from "@/data/cards";
+import { normalizeProfile, parseProfiles, type User } from "./profile";
+import {
+  evaluateApplication,
+  preparationKeys,
+  stepKey,
+  type Mode,
+} from "./prepare";
+import type { DocumentEvidence, DocumentEvidenceMap } from "./documents";
 import type { Budget, Setup } from "./prefs";
+export type { User } from "./profile";
 
-export interface User {
-  id: string;
-  name: string;
-  email: string;
-  age: number;
-  passHash: string;
-  owned: string[]; // card ids the user already holds
-  createdAt: number;
-  onboarded?: boolean; // finished the first-time checklist
-  budget?: Budget;
-  setup?: Setup;
-  tracking?: string[]; // IDs the user is working toward
-  priority?: string | null; // the one shown in the floating progress bar
-  prep?: Record<string, string[]>; // ticked "Prepare" row keys per card id
-}
-
-const USERS_KEY = "mabatid.users.v1";
-const SESSION_KEY = "mabatid.session.v1";
-
-function read<T>(key: string, fallback: T): T {
+const PROFILES_KEY = "mabatid.profiles.v2";
+const ACTIVE_KEY = "mabatid.active-profile.v2";
+const LEGACY_USERS_KEY = "mabatid.users.v1";
+const LEGACY_SESSION_KEY = "mabatid.session.v1";
+function read(key: string): unknown {
   try {
-    const raw = window.localStorage.getItem(key);
-    return raw ? (JSON.parse(raw) as T) : fallback;
+    return JSON.parse(localStorage.getItem(key) ?? "null");
   } catch {
-    return fallback;
+    return null;
   }
 }
-function write(key: string, value: unknown) {
+function write(key: string, value: unknown): boolean {
   try {
-    window.localStorage.setItem(key, JSON.stringify(value));
+    localStorage.setItem(key, JSON.stringify(value));
+    return true;
   } catch {
-    /* storage unavailable — state still works for this session */
+    return false;
   }
 }
-
-async function hash(email: string, password: string) {
-  const data = new TextEncoder().encode(`mabatid:${email.toLowerCase()}:${password}`);
-  const buf = await crypto.subtle.digest("SHA-256", data);
-  return Array.from(new Uint8Array(buf))
-    .map((b) => b.toString(16).padStart(2, "0"))
-    .join("");
-}
-
 interface Store {
   ready: boolean;
   users: User[];
   me: User | null;
-  register: (v: { name: string; email: string; password: string; age: number }) => Promise<string | null>;
-  login: (email: string, password: string) => Promise<string | null>;
+  createProfile: (v: { name: string; age: number }) => string | null;
+  selectProfile: (id: string) => void;
   logout: () => void;
   toggleOwned: (cardId: string) => void;
   togglePrep: (cardId: string, key: string) => void;
   toggleTrack: (cardId: string) => void;
   setPriority: (cardId: string) => void;
-  savePrefs: (p: { owned: string[]; budget: Budget; setup: Setup }) => void;
+  setFact: (fact: FactId, value: boolean | undefined) => void;
+  setMode: (cardId: string, mode: Mode) => void;
+  setDocumentEvidence: (id: string, evidence: DocumentEvidence) => void;
+  savePrefs: (p: {
+    owned: string[];
+    documents: DocumentEvidenceMap;
+    budget: Budget;
+    setup: Setup;
+    age: number;
+  }) => void;
 }
-
 const Ctx = createContext<Store | null>(null);
-
 export function StoreProvider({ children }: { children: ReactNode }) {
   const [ready, setReady] = useState(false);
   const [users, setUsers] = useState<User[]>([]);
   const [meId, setMeId] = useState<string | null>(null);
-
   useEffect(() => {
-    // Hydrate from localStorage after mount (it doesn't exist during SSR).
-    // One priority at most, and it must be one of the tracked IDs.
-    // eslint-disable-next-line react-hooks/set-state-in-effect
-    setUsers(
-      read<User[]>(USERS_KEY, []).map((u) => {
-        const tracking = [...new Set(u.tracking ?? [])];
-        return { ...u, tracking, priority: tracking.includes(u.priority ?? "") ? u.priority : (tracking[0] ?? null) };
-      }),
+    const saved = read(PROFILES_KEY);
+    const migrating = saved === null;
+    const profiles = parseProfiles(
+      migrating ? read(LEGACY_USERS_KEY) : saved,
+      migrating,
     );
-    setMeId(read<string | null>(SESSION_KEY, null));
+    const active = read(migrating ? LEGACY_SESSION_KEY : ACTIVE_KEY);
+    // Only erase the legacy records after the credential-free replacement is saved.
+    if (
+      write(PROFILES_KEY, profiles) &&
+      write(
+        ACTIVE_KEY,
+        typeof active === "string" && profiles.some((p) => p.id === active)
+          ? active
+          : null,
+      )
+    ) {
+      localStorage.removeItem(LEGACY_USERS_KEY);
+      localStorage.removeItem(LEGACY_SESSION_KEY);
+    }
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    setUsers(profiles);
+    setMeId(
+      typeof active === "string" && profiles.some((p) => p.id === active)
+        ? active
+        : null,
+    );
     setReady(true);
   }, []);
-
-  // Accepts a new list or an updater, so quick successive changes never overwrite each other.
-  const persist = useCallback((next: User[] | ((prev: User[]) => User[])) => {
-    setUsers((prev) => {
-      const value = typeof next === "function" ? next(prev) : next;
-      write(USERS_KEY, value);
-      return value;
+  const persist = useCallback((update: (previous: User[]) => User[]) => {
+    setUsers((previous) => {
+      const next = update(previous)
+        .map((p) => normalizeProfile(p))
+        .filter((p): p is User => p !== null);
+      write(PROFILES_KEY, next);
+      return next;
     });
   }, []);
-
-  const register: Store["register"] = useCallback(
-    async ({ name, email, password, age }) => {
-      const e = email.trim().toLowerCase();
-      if (users.some((u) => u.email === e)) return "That email is already registered. Try logging in.";
-      const user: User = {
-        id: crypto.randomUUID(),
-        name: name.trim(),
-        email: e,
-        age,
-        passHash: await hash(e, password),
-        owned: [],
-        createdAt: Date.now(),
-      };
-      persist([...users, user]);
-      setMeId(user.id);
-      write(SESSION_KEY, user.id);
-      return null;
+  const updateMe = useCallback(
+    (update: (profile: User) => User) => {
+      if (meId)
+        persist((profiles) =>
+          profiles.map((p) => (p.id === meId ? update(p) : p)),
+        );
     },
-    [users, persist],
+    [meId, persist],
   );
-
-  const login: Store["login"] = useCallback(
-    async (email, password) => {
-      const e = email.trim().toLowerCase();
-      const user = users.find((u) => u.email === e);
-      if (!user || user.passHash !== (await hash(e, password))) return "Email or password doesn’t match.";
-      setMeId(user.id);
-      write(SESSION_KEY, user.id);
-      return null;
+  const selectProfile = useCallback(
+    (id: string) => {
+      if (!users.some((p) => p.id === id)) return;
+      setMeId(id);
+      write(ACTIVE_KEY, id);
     },
     [users],
   );
-
+  const createProfile = useCallback(
+    ({ name, age }: { name: string; age: number }) => {
+      if (!name.trim() || name.trim().length > 40)
+        return "Enter a name with 1–40 characters.";
+      if (!Number.isInteger(age) || age < 0 || age > 120)
+        return "Enter an age from 0 to 120.";
+      const profile: User = {
+        id: crypto.randomUUID(),
+        name: name.trim(),
+        age,
+        owned: [],
+        createdAt: Date.now(),
+      };
+      persist((profiles) => [...profiles, profile]);
+      setMeId(profile.id);
+      write(ACTIVE_KEY, profile.id);
+      return null;
+    },
+    [persist],
+  );
   const logout = useCallback(() => {
     setMeId(null);
-    write(SESSION_KEY, null);
+    write(ACTIVE_KEY, null);
   }, []);
-
   const toggleOwned = useCallback(
-    (cardId: string) => {
-      if (!meId) return;
-      persist((prev) =>
-        prev.map((u) => {
-          if (u.id !== meId) return u;
-          const had = u.owned.includes(cardId);
-          const owned = had ? u.owned.filter((x) => x !== cardId) : [...u.owned, cardId];
-          // Getting an ID finishes it: stop tracking and move the priority along.
-          const tracking = had ? u.tracking : (u.tracking ?? []).filter((x) => x !== cardId);
-          const priority = tracking?.includes(u.priority ?? "") ? u.priority : (tracking?.[0] ?? null);
-          return { ...u, owned, tracking, priority };
-        }),
-      );
-    },
-    [meId, persist],
+    (id: string) =>
+      updateMe((p) => ({
+        ...p,
+        owned: p.owned.includes(id)
+          ? p.owned.filter((d) => d !== id)
+          : [...p.owned, id],
+      })),
+    [updateMe],
   );
-
   const toggleTrack = useCallback(
-    (cardId: string) => {
-      if (!meId) return;
-      persist((prev) =>
-        prev.map((u) => {
-          if (u.id !== meId) return u;
-          const cur = u.tracking ?? [];
-          const tracking = cur.includes(cardId) ? cur.filter((x) => x !== cardId) : [...cur, cardId];
-          // First tracked ID becomes the priority; dropping the priority hands it to the next one.
-          const priority = tracking.includes(u.priority ?? "") ? u.priority : (tracking[0] ?? null);
-          return { ...u, tracking, priority };
-        }),
-      );
+    (id: string) => {
+      if (!CARDS.some((c) => c.id === id)) return;
+      updateMe((p) => ({
+        ...p,
+        tracking: p.tracking?.includes(id)
+          ? p.tracking.filter((c) => c !== id)
+          : [...(p.tracking ?? []), id],
+      }));
     },
-    [meId, persist],
+    [updateMe],
   );
-
   const setPriority = useCallback(
-    (cardId: string) => {
-      if (!meId) return;
-      persist((prev) => prev.map((u) => (u.id === meId && (u.tracking ?? []).includes(cardId) ? { ...u, priority: cardId } : u)));
-    },
-    [meId, persist],
+    (id: string) =>
+      updateMe((p) => (p.tracking?.includes(id) ? { ...p, priority: id } : p)),
+    [updateMe],
   );
-
   const togglePrep = useCallback(
-    (cardId: string, key: string) => {
-      if (!meId) return;
-      persist((prev) =>
-        prev.map((u) => {
-          if (u.id !== meId) return u;
-          const cur = (u.prep?.[cardId] ?? []).map(String);
-          const next = cur.includes(key) ? cur.filter((k) => k !== key) : [...cur, key];
-          return { ...u, prep: { ...u.prep, [cardId]: next } };
-        }),
-      );
+    (id: string, key: string) => {
+      if (!CARDS.some((c) => c.id === id) || !preparationKeys(id).has(key))
+        return;
+      updateMe((p) => {
+        const current = p.prep?.[id] ?? [];
+        if (current.includes(key)) {
+          const sequence = evaluateApplication(id, new Set(p.owned), current, {
+            age: p.age,
+            facts: p.facts,
+            documents: p.documents,
+            mode: p.modes?.[id],
+            setup: p.setup,
+          }).steps;
+          const index = sequence.findIndex((s) => stepKey(s.step) === key);
+          const clear = new Set([
+            key,
+            ...(index < 0
+              ? []
+              : sequence.slice(index).map((s) => stepKey(s.step))),
+          ]);
+          return {
+            ...p,
+            prep: { ...p.prep, [id]: current.filter((k) => !clear.has(k)) },
+          };
+        }
+        if (key.startsWith("step:")) {
+          const step = evaluateApplication(id, new Set(p.owned), current, {
+            age: p.age,
+            facts: p.facts,
+            documents: p.documents,
+            mode: p.modes?.[id],
+            setup: p.setup,
+          }).steps.find((s) => stepKey(s.step) === key);
+          if (!step?.enabled) return p;
+        }
+        return { ...p, prep: { ...p.prep, [id]: [...current, key] } };
+      });
     },
-    [meId, persist],
+    [updateMe],
   );
-
+  const setFact = useCallback(
+    (fact: FactId, value: boolean | undefined) =>
+      updateMe((p) => ({ ...p, facts: { ...p.facts, [fact]: value } })),
+    [updateMe],
+  );
+  const setMode = useCallback(
+    (id: string, mode: Mode) =>
+      updateMe((p) => ({ ...p, modes: { ...p.modes, [id]: mode } })),
+    [updateMe],
+  );
+  const setDocumentEvidence = useCallback(
+    (id: string, evidence: DocumentEvidence) =>
+      updateMe((p) => ({
+        ...p,
+        documents: { ...p.documents, [id]: evidence },
+      })),
+    [updateMe],
+  );
   const savePrefs = useCallback(
-    (p: { owned: string[]; budget: Budget; setup: Setup }) => {
-      if (!meId) return;
-      persist((prev) => prev.map((u) => (u.id === meId ? { ...u, ...p, onboarded: true } : u)));
-    },
-    [meId, persist],
+    (prefs: {
+      owned: string[];
+      documents: DocumentEvidenceMap;
+      budget: Budget;
+      setup: Setup;
+      age: number;
+    }) => updateMe((p) => ({ ...p, ...prefs, onboarded: true })),
+    [updateMe],
   );
-
-  const me = useMemo(() => users.find((u) => u.id === meId) ?? null, [users, meId]);
+  const me = useMemo(
+    () => users.find((p) => p.id === meId) ?? null,
+    [users, meId],
+  );
   const value = useMemo(
-    () => ({ ready, users, me, register, login, logout, toggleOwned, togglePrep, toggleTrack, setPriority, savePrefs }),
-    [ready, users, me, register, login, logout, toggleOwned, togglePrep, toggleTrack, setPriority, savePrefs],
+    () => ({
+      ready,
+      users,
+      me,
+      createProfile,
+      selectProfile,
+      logout,
+      toggleOwned,
+      togglePrep,
+      toggleTrack,
+      setPriority,
+      savePrefs,
+      setFact,
+      setMode,
+      setDocumentEvidence,
+    }),
+    [
+      ready,
+      users,
+      me,
+      createProfile,
+      selectProfile,
+      logout,
+      toggleOwned,
+      togglePrep,
+      toggleTrack,
+      setPriority,
+      savePrefs,
+      setFact,
+      setMode,
+      setDocumentEvidence,
+    ],
   );
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>;
 }
-
 export function useStore() {
-  const v = useContext(Ctx);
-  if (!v) throw new Error("useStore must be used inside <StoreProvider>");
-  return v;
+  const store = useContext(Ctx);
+  if (!store) throw new Error("useStore must be used inside <StoreProvider>");
+  return store;
 }

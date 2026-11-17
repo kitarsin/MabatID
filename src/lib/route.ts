@@ -42,11 +42,11 @@ export interface Route {
   canonical: string;
 }
 
-/** Applies the guards: progress/edit need an account, auth is pointless when signed in. */
+/** Applies the guards: progress needs an account (guests may edit their starting point), auth is pointless when signed in. */
 export function resolveRoute(raw: RawRoute, signedIn: boolean): Route {
   let view = raw.view;
   let fixed = raw.dirty;
-  if (view && !signedIn && (view === "progress" || view === "edit")) {
+  if (view && !signedIn && view === "progress") {
     view = "tree";
     fixed = true;
   }
