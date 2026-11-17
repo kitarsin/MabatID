@@ -19,7 +19,7 @@ import type {
   Rule,
 } from "./types";
 
-export const CATALOG_VERSION = "mabatid-research-2026-11-17-v1";
+export const CATALOG_VERSION = "mabatid-research-2026-11-18-v2";
 export interface PlanningInput
   extends Pick<
     User,
@@ -102,7 +102,8 @@ export function buildPlannerCatalog(
         const row = rows.get(item.id);
         const id = `${prefix}:${item.id}`;
         if (!row) return { kind: "all", id, children: [] };
-        if (row.checked) return task(item.id, item.t, "satisfied");
+        if (row.checked && row.source !== "profile")
+          return task(item.id, item.t, "satisfied");
         if (
           item.when &&
           conditionValue(item.when, input.facts ?? {}, input.age) === undefined
@@ -144,7 +145,7 @@ export function buildPlannerCatalog(
         )
           return task(item.id, item.t, "missing", "procedure");
         if (!item.ids?.length) return task(item.id, item.t, "missing");
-        const docRules: DocumentRule[] = [...new Set(item.ids)].map((rawId) => {
+        const docRules: DocumentRule[] = [...new Set(item.ids)].map((rawId): DocumentRule => {
           const documentId =
             item.subject && item.subject !== "self" && !rawId.includes(":")
               ? `${item.subject}:${rawId}`
@@ -178,7 +179,7 @@ export function buildPlannerCatalog(
                 : "missing",
             ...(confirmation ? { confirmation } : {}),
           };
-        });
+        }).filter((rule) => row.source !== "profile" || rule.state === "satisfied");
         const requirement: Rule =
           (item.min ?? 1) > 1
             ? {
@@ -209,11 +210,45 @@ export function buildPlannerCatalog(
           children.push({
             kind: "any",
             id: `${prefix}:${entry.id}`,
-            options: entry.either.map((route) => ({
-              kind: "all",
-              id: `${prefix}:${entry.id}:${route.id}`,
-              children: route.items.filter((i) => !i.opt).map(itemRule),
-            })),
+            options: entry.either
+              .filter(
+                (route) =>
+                  !route.when ||
+                  conditionValue(route.when, input.facts ?? {}, input.age) !==
+                    false,
+              )
+              .map((route) => ({
+                kind: "all",
+                id: `${prefix}:${entry.id}:${route.id}`,
+                children: [
+                  ...(route.when &&
+                  conditionValue(route.when, input.facts ?? {}, input.age) ===
+                    undefined
+                    ? conditionFacts(route.when, input.age).length
+                      ? conditionFacts(route.when, input.age)
+                          .filter((fact) => input.facts?.[fact] === undefined)
+                          .map((fact) =>
+                            task(
+                              `${route.id}:eligibility:${fact}`,
+                              FACTS[fact],
+                              "unknown",
+                              "eligibility",
+                              fact,
+                            ),
+                          )
+                      : [
+                          task(
+                            `${route.id}:eligibility:age`,
+                            "Confirm the applicant age for this route.",
+                            "unknown",
+                            "eligibility",
+                            "age",
+                          ),
+                        ]
+                    : []),
+                  ...route.items.filter((i) => !i.opt).map(itemRule),
+                ],
+              })),
           });
         else if (!entry.opt) children.push(itemRule(entry));
       }

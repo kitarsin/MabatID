@@ -27,21 +27,10 @@ test("planning endpoint returns an uncached private preview without mutating the
 });
 
 test("API recalculates from each request rather than retaining another profile's documents", async () => {
-  const owned = (await (await POST(request(body))).json()) as PlanningResult;
-  const missing = (await (
-    await POST(
-      request({
-        ...body,
-        owned: ["psa", "school"],
-        facts: { enrolled: true, waiverRequested: false },
-      }),
-    )
-  ).json()) as PlanningResult;
-  assert.equal(owned.plans[0].steps.length, 1);
-  assert.deepEqual(
-    missing.plans[0].steps.map((s) => s.id),
-    ["philsys", "passport"],
-  );
+  const first = await (await POST(request({ targetId: "mysss", owned: ["philsys"], age: 20, facts: { sssEligible: true } }))).json() as PlanningResult;
+  const second = await (await POST(request({ targetId: "mysss", owned: ["psa", "school"], age: 20, facts: { enrolled: true, sssEligible: true } }))).json() as PlanningResult;
+  assert.deepEqual(first.plans[0].steps.map((s) => s.id), ["mysss"]);
+  assert.deepEqual(second.plans[0].steps.map((s) => s.id), ["philsys", "mysss"]);
 });
 
 test("transport validation rejects unknown IDs, fields, facts, checklists, and invalid scalar types", async () => {

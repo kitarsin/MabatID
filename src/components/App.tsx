@@ -5,6 +5,11 @@ import { LibraryBig, LogOut, Map, TrendingUp } from "lucide-react";
 import { ReactFlowProvider } from "@xyflow/react";
 import type { FactId, ProfileFacts } from "@/data/facts";
 import { stepKey, evaluateApplication, type Mode } from "@/lib/prepare";
+import { TreeAdvisor } from "./TreeAdvisor";
+import { useTreePlanning, type PlanningView } from "@/lib/use-tree-planning";
+import type { PlanObjective } from "@/lib/planner/types";
+import type { DocumentEvidenceMap } from "@/lib/documents";
+import type { Budget, Setup } from "@/lib/prefs";
 import { CARD_BY_ID } from "@/data/cards";
 import { useStore } from "@/lib/store";
 import { AuthScreen } from "./AuthScreen";
@@ -20,7 +25,6 @@ import { SkillTree } from "./SkillTree";
 import { TrackingBar } from "./TrackingBar";
 
 type Screen = "landing" | "auth" | "tree" | "browse" | "progress" | "edit";
-const EMPTY: ReadonlySet<string> = new Set();
 
 export function App() {
   const {
@@ -36,6 +40,11 @@ export function App() {
     setMode,
     setDocumentEvidence,
   } = useStore();
+  const [guestOwned, setGuestOwned] = useState<string[]>([]);
+  const [guestDocuments, setGuestDocuments] = useState<DocumentEvidenceMap>({});
+  const [guestBudget, setGuestBudget] = useState<Budget>("any");
+  const [guestSetup, setGuestSetup] = useState<Setup>("both");
+  const [objective, setObjective] = useState<PlanObjective>("fewest-documents");
   const [guestFacts, setGuestFacts] = useState<ProfileFacts>({});
   const [guestAge, setGuestAge] = useState<number | null>(null);
   const [guestModes, setGuestModes] = useState<Record<string, Mode>>({});
@@ -54,7 +63,9 @@ export function App() {
       if (me) return togglePrep(id, key);
       setGuestPrep((g) => {
         const cur = g[id] ?? [];
-        const sequence = evaluateApplication(id, EMPTY, cur, {
+        const sequence = evaluateApplication(id, new Set(guestOwned), cur, {
+          documents: guestDocuments,
+          setup: guestSetup,
           age: guestAge,
           facts: guestFacts,
           mode: guestModes[id],
@@ -77,7 +88,16 @@ export function App() {
         return { ...g, [id]: [...cur, key] };
       });
     },
-    [me, togglePrep, guestAge, guestFacts, guestModes],
+    [
+      me,
+      togglePrep,
+      guestAge,
+      guestFacts,
+      guestModes,
+      guestOwned,
+      guestDocuments,
+      guestSetup,
+    ],
   );
   const [filters, setFilters] = useState<Filters>(NO_FILTERS);
 
@@ -85,20 +105,28 @@ export function App() {
     () => ({
       age: me?.age ?? guestAge,
       facts: me?.facts ?? guestFacts,
-      documents: me?.documents,
+      documents: me?.documents ?? guestDocuments,
       prep: me?.prep ?? guestPrep,
       modes: me?.modes ?? guestModes,
-      setup: me?.setup,
+      setup: me?.setup ?? guestSetup,
     }),
-    [me, guestAge, guestFacts, guestPrep, guestModes],
+    [
+      me,
+      guestAge,
+      guestFacts,
+      guestPrep,
+      guestModes,
+      guestDocuments,
+      guestSetup,
+    ],
   );
   const matchIds = useMemo(
     () => matchSet(filters, context),
     [filters, context],
   );
   const owned = useMemo<ReadonlySet<string>>(
-    () => (me ? new Set(me.owned) : EMPTY),
-    [me],
+    () => new Set(me?.owned ?? guestOwned),
+    [me, guestOwned],
   );
   // `selected` keeps its connection lines lit after the sheet closes; tapping empty canvas clears it.
   const [sheetOpen, setSheetOpen] = useState(false);
@@ -108,23 +136,71 @@ export function App() {
   }, []);
   const clearSelection = useCallback(() => setSelected(null), []);
 
-  if (!ready) return <div className="min-h-dvh bg-navy" aria-busy="true" />;
-
-  // Active device profiles skip the landing screen.
   const view: Screen =
     me && (screen === "landing" || screen === "auth") ? "tree" : screen;
+  const tree = useTreePlanning(
+    {
+      owned: [...owned].sort(),
+      age: me?.age ?? guestAge,
+      facts,
+      documents: context.documents,
+      prep,
+      modes: context.modes,
+      budget: me?.budget ?? guestBudget,
+      setup: context.setup,
+      objective,
+      ...(selected ? { targetId: selected } : {}),
+    },
+    ready && (view === "tree" || sheetOpen),
+  );
+  const planning: PlanningView = {
+    result: tree.data?.goal,
+    plan: tree.plan,
+    loading: tree.loading,
+    error: tree.error,
+    objective,
+    onObjectiveChange: setObjective,
+    onSelectPlan: tree.onSelectPlan,
+    onRetry: tree.onRetry,
+  };
+  const editStartingPoint = useCallback(() => setScreen("edit"), []);
+  const chooseGoal = useCallback((id: string) => {
+    setSelected(id);
+    setSheetOpen(false);
+  }, []);
+
+  if (!ready) return <div className="min-h-dvh bg-navy" aria-busy="true" />;
 
   // New device profiles start with document and application preferences.
-  if (me && (!me.onboarded || screen === "edit"))
+  if ((me && !me.onboarded) || screen === "edit")
     return (
       <Onboarding
-        me={me}
-        editing={!!me.onboarded}
+        me={
+          me ?? {
+            id: "preview",
+            name: "Preview",
+            age: guestAge ?? NaN,
+            owned: guestOwned,
+            documents: guestDocuments,
+            budget: guestBudget,
+            setup: guestSetup,
+            createdAt: 0,
+            onboarded: true,
+          }
+        }
+        editing={!me || !!me.onboarded}
         onSave={(p) => {
-          savePrefs(p);
+          if (me) savePrefs(p);
+          else {
+            setGuestAge(p.age);
+            setGuestOwned(p.owned);
+            setGuestDocuments(p.documents);
+            setGuestBudget(p.budget);
+            setGuestSetup(p.setup);
+          }
           setScreen("tree");
         }}
-        onCancel={() => setScreen("progress")}
+        onCancel={() => setScreen(me ? "progress" : "tree")}
       />
     );
 
@@ -186,26 +262,43 @@ export function App() {
 
       <main className="relative min-h-0 flex-1 bg-background">
         {view === "tree" ? (
-          <>
-            <ReactFlowProvider>
-              <SkillTree
-                context={context}
-                owned={owned}
-                selectedId={selected}
-                onSelect={select}
-                onClear={clearSelection}
-                matchIds={matchIds}
-                liftControls={!!me?.priority}
-              />
-            </ReactFlowProvider>
-            <Legend />
-            <FilterBar
-              filters={filters}
-              onChange={setFilters}
-              context={context}
+          <div className="absolute inset-0 flex flex-col">
+            <TreeAdvisor
+              data={tree.data}
+              view={planning}
+              selectedId={selected}
+              onChooseGoal={chooseGoal}
+              onOpenGuide={select}
+              onClear={clearSelection}
+              onEdit={editStartingPoint}
             />
-            {me && <TrackingBar me={me} onOpen={select} />}
-          </>
+            <div className="relative min-h-0 flex-1">
+              <ReactFlowProvider>
+                <SkillTree
+                  context={context}
+                  owned={owned}
+                  selectedId={selected}
+                  onSelect={select}
+                  onClear={clearSelection}
+                  matchIds={matchIds}
+                  liftControls={!!me?.priority}
+                  onEdit={editStartingPoint}
+                  assessments={tree.data?.nodes}
+                  recommendedIds={
+                    tree.data?.recommendations.map((r) => r.id) ?? []
+                  }
+                  plan={tree.plan}
+                />
+              </ReactFlowProvider>
+              <Legend />
+              <FilterBar
+                filters={filters}
+                onChange={setFilters}
+                context={context}
+              />
+              {me && <TrackingBar me={me} onOpen={select} />}
+            </div>
+          </div>
         ) : view === "browse" ? (
           <div className="h-full overflow-y-auto bg-background pb-24">
             <BrowseScreen
@@ -247,15 +340,19 @@ export function App() {
         signedIn={!!me}
         age={me?.age ?? guestAge}
         facts={facts}
-        documents={me?.documents ?? {}}
-        onSetDocument={setDocumentEvidence}
+        documents={me?.documents ?? guestDocuments}
+        onSetDocument={(id, value) =>
+          me
+            ? setDocumentEvidence(id, value)
+            : setGuestDocuments((d) => ({ ...d, [id]: value }))
+        }
         mode={selected ? (me?.modes ?? guestModes)[selected] : undefined}
-        modes={me?.modes ?? guestModes}
+        planning={planning}
         onSetFact={onSetFact}
         onSetMode={onSetMode}
         onSetAge={setGuestAge}
-        budget={me?.budget}
-        setup={me?.setup}
+        budget={me?.budget ?? guestBudget}
+        setup={me?.setup ?? guestSetup}
         prep={prep}
         tracking={me?.tracking ?? []}
         priority={me?.priority ?? null}
@@ -337,21 +434,23 @@ function Dock({
 
 function Legend() {
   return (
-    <ul className="pointer-events-none absolute left-3 top-3 z-10 flex flex-col gap-1.5 rounded-xl bg-white/90 p-2.5 text-[11px] font-bold text-navy shadow ring-1 ring-border backdrop-blur">
-      <li className="flex items-center gap-2">
-        <span className="size-3 rounded-full bg-amber" /> Obtained
-      </li>
-      <li className="flex items-center gap-2">
-        <span className="size-3 rounded-full border-2 border-civic bg-white" />{" "}
-        Requirements ready
-      </li>
-      <li className="flex items-center gap-2">
-        <span className="size-3 rounded-full border border-dashed border-slate-500 bg-white" />{" "}
-        Needs preparation
-      </li>
-      <li className="max-w-36 border-t border-border pt-1.5 text-[10px] font-normal">
-        Overview links only. Select an ID to see document relationships.
-      </li>
-    </ul>
+    <details className="absolute left-3 top-3 z-10 max-w-52 rounded-xl bg-white/95 p-2.5 text-[11px] text-navy shadow ring-1 ring-border">
+      <summary className="cursor-pointer font-bold">Tree key</summary>
+      <ul className="mt-2 space-y-2">
+        <li>★ Suggested next · based on your starting point</li>
+        <li>Gold · recorded in your inventory</li>
+        <li>Blue outline · modeled requirements ready</li>
+        <li>Question mark · needs confirmation</li>
+        <li>
+          Dashed overview links are illustrative. Select a goal for its computed
+          route.
+        </li>
+        <li>
+          AND means all shown inputs for that selected route. Route buttons
+          compare alternatives.
+        </li>
+        <li>Other paperwork and agency checks can still apply.</li>
+      </ul>
+    </details>
   );
 }

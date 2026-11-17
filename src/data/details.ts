@@ -3,7 +3,7 @@ import type { DocumentCheck } from "@/lib/documents";
 
 /**
  * Short, scannable card content condensed from the research workbook
- * ("Summary Cards" + each tier's step-by-step and reference columns).
+ * ("Summary Cards" + each group's step-by-step and reference columns).
  * `**bold**` marks what the reader must not miss.
  */
 
@@ -29,7 +29,15 @@ export interface PrepItem {
 /** Either a single item, or alternative routes — completing ANY one route satisfies it. */
 export type PrepEntry =
   | PrepItem
-  | { id: string; either: { id: string; label: string; items: PrepItem[] }[] };
+  | {
+      id: string;
+      either: {
+        id: string;
+        label: string;
+        when?: Condition;
+        items: PrepItem[];
+      }[];
+    };
 
 export interface Step {
   id: string;
@@ -1333,7 +1341,7 @@ export const DETAILS: Record<string, CardDetail> = {
     procedure: "alternative",
     onlineRequiresVisit: false,
     purpose:
-      "The national ID — one free, accepted-everywhere proof of identity.",
+      "A general identity credential for government and private transactions, available in physical, paper and digital formats subject to authentication.",
     issuedBy: "Philippine Statistics Authority (PhilSys)",
     fee: { min: 0, max: 0 },
     onsite: true,
@@ -1462,6 +1470,10 @@ export const DETAILS: Record<string, CardDetail> = {
     onsite: true,
     online: true,
     refs: [
+      {
+        label: "DFA embassy — accepted IDs and student route",
+        url: "https://www.philippine-embassy.org.sg/list-of-acceptable-valid-ids-for-passport-application/",
+      },
       { label: "DFA passport appointment", url: "https://www.passport.gov.ph" },
       {
         label: "DFA consular requirements",
@@ -1479,10 +1491,49 @@ export const DETAILS: Record<string, CardDetail> = {
           ids: ["psa"],
         },
         {
-          id: "accepted-id",
-          t: "**1 DFA-accepted primary ID** — original + photocopy",
-          ids: ["philsys", "lto", "prc", "postal", "comelec", "umid"],
-          confirm: true,
+          id: "identity-routes",
+          either: [
+            {
+              id: "accepted-identity",
+              label: "Accepted identity credential",
+              items: [
+                {
+                  id: "accepted-id",
+                  t: "**1 DFA-accepted ID** — original + photocopy. Confirm the required issuing office and format, especially for Voter's Certification.",
+                  ids: [
+                    "philsys",
+                    "lto",
+                    "prc",
+                    "postal",
+                    "comelec",
+                    "umid",
+                    "senior",
+                    "owwa",
+                  ],
+                  confirm: true,
+                },
+              ],
+            },
+            {
+              id: "student-identity",
+              label: "Currently enrolled student route",
+              when: { fact: "enrolled" },
+              items: [
+                {
+                  id: "student-id",
+                  t: "**Current School ID** — original and photocopy; confirm acceptance for this application.",
+                  ids: ["school"],
+                  confirm: true,
+                },
+                {
+                  id: "student-registration",
+                  t: "**Certificate of Registration** for an adult student, with the current School ID. Confirm the required school validation with the passport office.",
+                  when: { not: { underAge: 18 } },
+                  confirm: true,
+                },
+              ],
+            },
+          ],
         },
         {
           id: "appointment",
@@ -1545,7 +1596,16 @@ export const DETAILS: Record<string, CardDetail> = {
   mysss: {
     procedure: "alternative",
     onlineRequiresVisit: false,
-    purpose: "SSS membership card that doubles as a bank-linked payment card.",
+    purpose:
+      "SSS functional identification and bank-linked service card for SSS transactions and disbursements.",
+    acceptance: {
+      accepted: [
+        "Identification for SSS transactions and bank-linked services under the issuing partner bank's rules.",
+      ],
+      limits: [
+        "Other government agencies and private institutions set their own acceptance policies; the MySSS Card is distinct from the legacy UMID card.",
+      ],
+    },
     issuedBy: "Social Security System (SSS) with partner banks",
     fee: { min: 200, max: 200 },
     onsite: false,
@@ -1699,13 +1759,25 @@ export const DETAILS: Record<string, CardDetail> = {
     procedure: "alternative",
     onlineRequiresVisit: false,
     purpose:
-      "Pag-IBIG membership card that works as a bank-linked payment card.",
+      "Pag-IBIG loyalty and bank-linked disbursement service card for eligible members.",
+    acceptance: {
+      accepted: [
+        "Pag-IBIG transactions and the loyalty/disbursement services supported by the partner bank.",
+      ],
+      limits: [
+        "Pag-IBIG Circular No. 450 states that Loyalty Card Plus is not considered a government ID. Do not assume it substitutes for an accepted government ID in another application.",
+      ],
+    },
     issuedBy: "Pag-IBIG Fund with UnionBank / AUB",
     fee: { min: 125, max: 125 },
     onsite: true,
     online: false,
     refs: [
       { label: "Pag-IBIG Fund", url: "https://www.pagibigfund.gov.ph" },
+      {
+        label: "Pag-IBIG Circular No. 450 — Loyalty Card Plus guidelines",
+        url: "https://www.pagibigfund.gov.ph/document/pdf/circulars/provident/Circular%20No.%20450%20-%20Modified%20Guidelines%20on%20the%20Availment%20of%20the%20Pag-IBIG%20Fund%20Loyalty%20Card%20Plus.pdf",
+      },
       {
         label: "Virtual Pag-IBIG",
         url: "https://www.pagibigfundservices.com/virtualpagibig/",
@@ -1859,7 +1931,7 @@ export const DETAILS: Record<string, CardDetail> = {
     procedure: "alternative",
     onlineRequiresVisit: false,
     purpose:
-      "National ID for persons with disability, unlocking discounts and benefits.",
+      "Disability identification card for eligible applicants to access applicable discounts, services and benefits.",
     issuedBy: "LGU PDAO / Social Welfare Office (DOH–NCDA registry)",
     fee: { min: 0, max: 0 },
     onsite: true,

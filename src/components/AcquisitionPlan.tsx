@@ -1,110 +1,28 @@
 "use client";
 
-import { useEffect, useState } from "react";
 import { ArrowRight, Check, LoaderCircle, Route } from "lucide-react";
 import { FACTS, type FactId, type ProfileFacts } from "@/data/facts";
-import type { DocumentEvidenceMap } from "@/lib/documents";
-import type { Mode } from "@/lib/prepare";
-import type { Budget, Setup } from "@/lib/prefs";
-import type {
-  AcquisitionPlan as GeneratedPlan,
-  PlanObjective,
-  PlanningResult,
-} from "@/lib/planner/types";
+import type { AcquisitionPlan as GeneratedPlan } from "@/lib/planner/types";
+import type { PlanningView } from "@/lib/use-tree-planning";
 import { FactQuestions } from "./FactQuestions";
 import { Rich } from "./Rich";
 
 export function AcquisitionPlan({
-  targetId,
-  owned,
-  age,
   facts,
-  documents,
-  prep,
-  modes,
-  budget,
-  setup,
   signedIn,
   onOpen,
   onSetFact,
   onFollow,
+  view,
 }: {
-  targetId: string;
-  owned: ReadonlySet<string>;
-  age: number | null;
   facts: ProfileFacts;
-  documents: DocumentEvidenceMap;
-  prep: Record<string, string[]>;
-  modes: Record<string, Mode>;
-  budget?: Budget;
-  setup?: Setup;
   signedIn: boolean;
   onOpen: (id: string) => void;
   onSetFact: (id: FactId, value: boolean | undefined) => void;
   onFollow: (plan: GeneratedPlan) => void;
+  view: PlanningView;
 }) {
-  const [objective, setObjective] = useState<PlanObjective>("fewest-documents");
-  const [response, setResponse] = useState<{
-    key: string;
-    data?: PlanningResult;
-    error?: string;
-  } | null>(null);
-  const [selection, setSelection] = useState<{
-    key: string;
-    id: string;
-  } | null>(null);
-  const [retry, setRetry] = useState(0);
-  const requestKey = JSON.stringify({
-    targetId,
-    owned: [...owned].sort(),
-    age,
-    facts,
-    documents,
-    prep,
-    modes,
-    budget,
-    setup,
-    objective,
-  });
-  useEffect(() => {
-    const controller = new AbortController();
-    // Answering several questions should send one up-to-date request, not a request for every keystroke.
-    const timer = setTimeout(async () => {
-      try {
-        const result = await fetch("/api/plans/preview", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: requestKey,
-          signal: controller.signal,
-          cache: "no-store",
-        });
-        const json = await result.json();
-        if (!result.ok)
-          throw new Error(json.error?.message ?? "Could not generate a plan.");
-        if (!controller.signal.aborted)
-          setResponse({ key: requestKey, data: json as PlanningResult });
-      } catch (error) {
-        if (!controller.signal.aborted)
-          setResponse({
-            key: requestKey,
-            error:
-              error instanceof Error
-                ? error.message
-                : "Could not generate a plan.",
-          });
-      }
-    }, 250);
-    return () => {
-      clearTimeout(timer);
-      controller.abort();
-    };
-  }, [requestKey, retry]);
-  const current = response?.key === requestKey ? response : null;
-  const result = current?.data;
-  const plan =
-    result?.plans.find(
-      (p) => selection?.key === requestKey && p.id === selection.id,
-    ) ?? result?.plans[0];
+  const { result, plan, objective, onObjectiveChange, onSelectPlan } = view;
   const factIds =
     plan?.questions.flatMap((q) =>
       q.factId && Object.hasOwn(FACTS, q.factId) ? [q.factId as FactId] : [],
@@ -138,29 +56,26 @@ export function AcquisitionPlan({
             key={option.id}
             type="button"
             aria-pressed={objective === option.id}
-            onClick={() => setObjective(option.id)}
+            onClick={() => onObjectiveChange(option.id)}
             className={`rounded-full border-2 px-3 py-2 text-xs font-bold ${objective === option.id ? "border-civic bg-civic text-white" : "border-border bg-card"}`}
           >
             {option.label}
           </button>
         ))}
       </div>
-      {!current && (
+      {view.loading && (
         <p role="status" className="flex items-center gap-2 text-sm">
           <LoaderCircle className="size-4 animate-spin" aria-hidden="true" />
           Finding your path…
         </p>
       )}
-      {current?.error && (
+      {view.error && (
         <div role="alert" className="space-y-2 text-sm">
-          <p>{current.error}</p>
+          <p>{view.error}</p>
           <button
             type="button"
             className="font-bold text-civic underline"
-            onClick={() => {
-              setResponse(null);
-              setRetry((n) => n + 1);
-            }}
+            onClick={view.onRetry}
           >
             Try again
           </button>
@@ -201,7 +116,7 @@ export function AcquisitionPlan({
                   key={p.id}
                   type="button"
                   aria-pressed={p.id === plan.id}
-                  onClick={() => setSelection({ key: requestKey, id: p.id })}
+                  onClick={() => onSelectPlan(p.id)}
                   className={`rounded-lg border-2 px-3 py-2 text-xs font-bold ${p.id === plan.id ? "border-civic bg-white" : "border-border"}`}
                 >
                   Route {i + 1} · {p.steps.length} acquisition

@@ -6,18 +6,17 @@ import {
   CARDS,
   CARD_KIND_META,
   CATEGORY_META,
-  TIER_META,
+  GROUP_META,
+  CREDENTIAL_GROUPS,
   type Category,
   type CardKind,
-  type Tier,
 } from "@/data/cards";
 import { DETAILS } from "@/data/details";
 import { matchSet, NO_FILTERS } from "@/lib/filters";
 import { CardKindFilter } from "./CardKindFilter";
 import { CardIcon } from "./icons";
 import { Rich } from "./Rich";
-
-const TIERS: Tier[] = [0, 1, 2, 3];
+import { GroupGuide } from "./GroupGuide";
 
 /** Every ID in the app, open to everyone (signed in or not). Tapping one opens its full details. */
 export function BrowseScreen({
@@ -59,6 +58,8 @@ export function BrowseScreen({
           references.
         </p>
       </div>
+
+      <GroupGuide />
 
       <div className="relative">
         <Search
@@ -112,17 +113,20 @@ export function BrowseScreen({
         </p>
       )}
 
-      {TIERS.map((t) => {
-        const items = list.filter((c) => c.tier === t);
+      {CREDENTIAL_GROUPS.map((t) => {
+        const items = list.filter((c) => c.group === t);
         if (!items.length) return null;
         return (
-          <section key={t} aria-labelledby={`browse-tier-${t}`}>
+          <section key={t} aria-labelledby={`browse-group-${t}`}>
             <h2
-              id={`browse-tier-${t}`}
-              className="mb-2 text-xs font-bold uppercase tracking-wider text-civic"
+              id={`browse-group-${t}`}
+              className="text-xs font-bold uppercase tracking-wider text-civic"
             >
-              {TIER_META[t].label}
+              {GROUP_META[t].label}
             </h2>
+            <p className="mb-3 mt-1 text-xs text-muted-foreground">
+              {GROUP_META[t].blurb}
+            </p>
             <ul className="space-y-2">
               {items.map((c) => {
                 const d = DETAILS[c.id];

@@ -74,6 +74,8 @@ export function planAcquisition(
   const frontier = Math.max(1, options.maxFrontier ?? 48);
   let operations = 0;
   let complete = true;
+  let seeding = false;
+  let ceiling = limit;
   const cycles = new Map<string, string[]>();
   const unavailable = new Set<string>();
   const ineligible = new Set<string>();
@@ -81,12 +83,12 @@ export function planAcquisition(
   for (const node of Object.values(catalog.acquisitions))
     for (const route of node.routes) routeById.set(route.id, route);
   const tick = () => {
-    if (operations >= limit) {
-      complete = false;
+    if (operations >= ceiling) {
+      if (!seeding) complete = false;
       return false;
     }
     operations++;
-    if (operations === limit) complete = false;
+    if (!seeding && operations === limit) complete = false;
     return true;
   };
   const signature = (c: Candidate) =>
@@ -153,8 +155,8 @@ export function planAcquisition(
     const unique = new Map<string, Candidate>();
     for (const value of values) unique.set(signature(value), value);
     const ranked = [...unique.values()].sort(compare);
-    if (ranked.length > frontier) complete = false;
-    return ranked.slice(0, frontier);
+    if (!seeding && ranked.length > frontier) complete = false;
+    return ranked.slice(0, seeding ? 1 : frontier);
   };
   const merge = (a: Candidate, b: Candidate): Candidate | null => {
     tick(); // Preserve assembly of already-proven candidates after the exploration budget is spent.
@@ -279,7 +281,7 @@ export function planAcquisition(
       for (const b of right) {
         const c = merge(a, b);
         if (c) out.push(c);
-        if (operations >= limit && out.length) return trim(out);
+        if (operations >= ceiling && out.length) return trim(out);
       }
     return trim(out);
   }
@@ -304,7 +306,7 @@ export function planAcquisition(
             ...c,
             choices: { ...c.choices, [rule.id]: [childId] },
           });
-        if (operations >= limit) break;
+        if (operations >= ceiling || (seeding && values.length)) break;
       }
       return trim(values);
     }
@@ -338,7 +340,7 @@ export function planAcquisition(
             ...selected,
             sorted[i].documentId,
           ]);
-        if (operations >= limit) break;
+        if (operations >= ceiling || (seeding && values.length)) break;
       }
     }
     choose(0, rule.count, [empty()], []);
@@ -382,13 +384,19 @@ export function planAcquisition(
         )
           values.push(next);
       }
-      if (operations >= limit) break;
+      if (operations >= ceiling || (seeding && values.length)) break;
     }
     return trim(values);
   }
-  const candidates = catalog.acquisitions[targetId].owned
-    ? []
-    : solveCard(targetId, []);
+  // Obtain a small valid witness first, so an expensive early OR group cannot starve a later mandatory prerequisite.
+  // The normal branch search still runs afterwards; the seed is not assumed optimal.
+  let seed: Candidate[] = [];
+  if (!catalog.acquisitions[targetId].owned && limit >= 2000) {
+    seeding = true; ceiling = Math.min(1000, Math.floor(limit / 5));
+    seed = solveCard(targetId, []);
+    seeding = false; ceiling = limit;
+  }
+  const candidates = catalog.acquisitions[targetId].owned ? [] : [...seed, ...solveCard(targetId, [])];
   // Remove redundant supersets before presenting alternatives. Different prerequisite sets remain comparable.
   const canonicalQuestion = (task: PlanTask) =>
     task.factId

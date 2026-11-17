@@ -23,27 +23,28 @@ test("type filters distinguish identity credentials from certificates and cleara
   assert.equal(ids.size + documents.size, CARDS.length);
 });
 
-test("type is independent of tier and significance and combines with existing filters", () => {
-  const mixedTier: Filters = {
+test("type is independent of group and significance and combines with existing filters", () => {
+  const mixedGroup: Filters = {
     ...NO_FILTERS,
     kind: "document",
-    tiers: [1],
+    groups: ["supporting"],
     category: "supporting",
     budget: "low",
   };
-  const documents = matchSet(mixedTier)!;
+  const documents = matchSet(mixedGroup)!;
   assert.equal(documents.has("nbi"), true);
   assert.equal(documents.has("npc"), true);
   assert.equal(documents.has("comelec"), true);
   assert.equal(documents.has("school"), false);
   assert.equal(documents.has("psa"), false);
-  const ids = matchSet({ ...mixedTier, kind: "id" })!;
+  const ids = matchSet({ ...mixedGroup, kind: "id" })!;
   assert.equal(ids.has("barangay-id"), true);
   assert.equal(ids.has("nbi"), false);
   assert.equal(ids.has("passport"), false);
   assert.ok(
     [...ids].every(
-      (id) => CARD_BY_ID[id].kind === "id" && CARD_BY_ID[id].tier === 1,
+      (id) =>
+        CARD_BY_ID[id].kind === "id" && CARD_BY_ID[id].group === "supporting",
     ),
   );
   assert.equal(
@@ -60,7 +61,7 @@ test("type selection participates in the active count and Clear restores all typ
       kind: "id",
       category: "supporting",
       budget: "low",
-      tiers: [1, 2],
+      groups: ["supporting", "identity"],
     }),
     4,
   );

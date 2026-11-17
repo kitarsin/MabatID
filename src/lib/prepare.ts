@@ -157,15 +157,39 @@ export function evaluatePrepare(
   });
   for (const entry of d.req.prepare) {
     if ("either" in entry) {
-      const routes = entry.either.map((r) => {
-        const rows = r.items.map(rowOf).filter((r): r is PrepRow => r !== null);
-        return {
-          id: r.id,
-          label: r.label,
-          rows,
-          complete: rows.filter((r) => !r.opt).every((r) => r.checked),
-        };
-      });
+      const routes = entry.either
+        .filter(
+          (r) =>
+            !r.when ||
+            conditionValue(r.when, context.facts ?? {}, context.age) !== false,
+        )
+        .map((r) => {
+          const rows = r.items
+            .map(rowOf)
+            .filter((r): r is PrepRow => r !== null);
+          if (
+            r.when &&
+            conditionValue(r.when, context.facts ?? {}, context.age) ===
+              undefined &&
+            !obtained
+          )
+            rows.unshift({
+              key: `condition:${r.id}`,
+              text: "Confirm eligibility for this document route in the questions above.",
+              checked: false,
+              auto: false,
+              opt: false,
+              unknown: true,
+              blocked: true,
+              source: null,
+            });
+          return {
+            id: r.id,
+            label: r.label,
+            rows,
+            complete: rows.filter((r) => !r.opt).every((r) => r.checked),
+          };
+        });
       nodes.push({
         kind: "either",
         key: entry.id,

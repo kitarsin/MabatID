@@ -1,16 +1,21 @@
-import { CARDS, type CardKind, type Category, type Tier } from "@/data/cards";
+import {
+  CARDS,
+  type CardKind,
+  type Category,
+  type CredentialGroup,
+} from "@/data/cards";
 import { fitsBudget, type Budget } from "./prefs";
 import { applicationMode } from "./prepare";
 import type { ReadinessContext } from "./tree";
 
 export interface Filters {
-  tiers: Tier[];
+  groups: CredentialGroup[];
   category: Category | null;
   budget: Budget | null;
   kind: CardKind | null;
 }
 export const NO_FILTERS: Filters = {
-  tiers: [],
+  groups: [],
   category: null,
   budget: null,
   kind: null,
@@ -18,7 +23,7 @@ export const NO_FILTERS: Filters = {
 export type FilterContext = Pick<ReadinessContext, "facts" | "modes" | "setup">;
 
 export const activeFilterCount = (filters: Filters) =>
-  Number(filters.tiers.length > 0) +
+  Number(filters.groups.length > 0) +
   Number(filters.category !== null) +
   Number(filters.budget !== null) +
   Number(filters.kind !== null);
@@ -33,7 +38,7 @@ export function matchSet(
     CARDS.filter(
       (card) =>
         (!filters.kind || card.kind === filters.kind) &&
-        (!filters.tiers.length || filters.tiers.includes(card.tier)) &&
+        (!filters.groups.length || filters.groups.includes(card.group)) &&
         (!filters.category || card.category === filters.category) &&
         (!filters.budget ||
           fitsBudget(

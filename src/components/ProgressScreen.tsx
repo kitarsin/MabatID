@@ -1,13 +1,15 @@
 "use client";
 
 import { Star, SlidersHorizontal, Target } from "lucide-react";
-import { CARDS, TIER_META, type Tier } from "@/data/cards";
+import { CARDS, CREDENTIAL_GROUPS, GROUP_META } from "@/data/cards";
+import { EXTRA_DOCUMENTS } from "@/data/documents";
 import { applicationMode, trackProgress } from "@/lib/prepare";
-import { levelTitle, statusOf, TIER_COUNTS } from "@/lib/tree";
+import { statusOf } from "@/lib/tree";
 import { BUDGETS, SETUPS, fitsBudget, fitsSetup } from "@/lib/prefs";
 import type { User } from "@/lib/store";
+import { GroupGuide } from "./GroupGuide";
 
-const TIERS: Tier[] = [0, 1, 2, 3];
+const INVENTORY = [...CARDS, ...EXTRA_DOCUMENTS];
 
 export function ProgressScreen({
   me,
@@ -23,8 +25,8 @@ export function ProgressScreen({
   onStopTracking: (id: string) => void;
 }) {
   const owned = new Set(me.owned);
-  const total = CARDS.length;
-  const heldTargets = CARDS.filter((c) => owned.has(c.id)).length;
+  const total = INVENTORY.length;
+  const heldTargets = INVENTORY.filter((c) => owned.has(c.id)).length;
   const tracked = (me.tracking ?? [])
     .map((id) => CARDS.find((c) => c.id === id))
     .filter((c): c is (typeof CARDS)[number] => !!c);
@@ -71,14 +73,17 @@ export function ProgressScreen({
           <Ring pct={pct} />
           <div>
             <p className="text-xs font-bold uppercase tracking-wider text-mist">
-              Your level
+              Your collection
             </p>
-            <p className="text-xl font-extrabold">{levelTitle(owned)}</p>
-            <p className="text-sm text-mist">
-              {heldTargets} of {total} items collected
+            <p className="text-xl font-extrabold">
+              {heldTargets} of {total} inventory items recorded
             </p>
           </div>
         </div>
+        <p className="mt-3 text-xs text-mist">
+          A reference count, not a completion target. Only pursue credentials
+          relevant to you.
+        </p>
         <button
           type="button"
           onClick={onEdit}
@@ -186,16 +191,19 @@ export function ProgressScreen({
         )}
       </section>
 
-      <section aria-labelledby="by-tier">
-        <h2 id="by-tier" className="mb-3 text-lg font-extrabold">
-          By tier
+      <section aria-labelledby="by-group">
+        <h2 id="by-group" className="mb-3 text-lg font-extrabold">
+          By group
         </h2>
+        <div className="mb-3">
+          <GroupGuide />
+        </div>
         <ul className="space-y-3">
-          {TIERS.map((t) => {
-            const have = CARDS.filter(
-              (c) => c.tier === t && owned.has(c.id),
+          {CREDENTIAL_GROUPS.map((t) => {
+            const have = INVENTORY.filter(
+              (c) => c.group === t && owned.has(c.id),
             ).length;
-            const of = TIER_COUNTS[t];
+            const of = INVENTORY.filter((c) => c.group === t).length;
             return (
               <li
                 key={t}
@@ -203,18 +211,21 @@ export function ProgressScreen({
               >
                 <div className="mb-2 flex items-baseline justify-between gap-2">
                   <span className="text-sm font-bold">
-                    {TIER_META[t].label}
+                    {GROUP_META[t].label}
                   </span>
                   <span className="text-sm font-semibold text-muted-foreground">
                     {have}/{of}
                   </span>
                 </div>
+                <p className="mb-3 text-xs text-muted-foreground">
+                  {GROUP_META[t].blurb}
+                </p>
                 <div
                   role="progressbar"
                   aria-valuemin={0}
                   aria-valuemax={of}
                   aria-valuenow={have}
-                  aria-label={`${TIER_META[t].label} progress`}
+                  aria-label={`${GROUP_META[t].label} progress`}
                   className="h-3 overflow-hidden rounded-full bg-muted"
                 >
                   <div
@@ -270,7 +281,7 @@ function Ring({ pct }: { pct: number }) {
       viewBox="0 0 80 80"
       className="size-20 shrink-0 -rotate-90"
       role="img"
-      aria-label={`${pct}% complete`}
+      aria-label={`${pct}% of inventory items recorded`}
     >
       <circle
         cx="40"

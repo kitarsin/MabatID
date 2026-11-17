@@ -91,6 +91,30 @@ test("backward chaining orders a prerequisite chain and counts shared acquisitio
   assert.deepEqual(plan.missingDocuments, ["a", "b", "shared"]);
 });
 
+test("bounded search retains a complete path when early alternatives consume the remaining budget", () => {
+  const alternatives = Array.from({ length: 500 }, (_, i) => `option-${i}`);
+  const c = catalog({
+    root: [
+      route("root:r", all("root:req",
+        any("root:choice", ...alternatives.map((id) => doc("root", id))),
+        doc("root", "mandatory"),
+      )),
+    ],
+    ...Object.fromEntries(alternatives.map((id) => [id, [route(`${id}:r`)]])),
+    mandatory: [route("mandatory:r")],
+  });
+  const result = planAcquisition(c, "root", { maxOperations: 2000 });
+  assert.equal(result.search.complete, false);
+  assert.ok(result.search.operations <= result.search.limit);
+  assert.ok(result.plans.length > 0);
+  for (const plan of result.plans) {
+    assert.equal(plan.steps.at(-1)?.id, "root");
+    assert.ok(plan.steps.some((step) => step.id === "mandatory"));
+    assert.equal(plan.steps.filter((step) => alternatives.includes(step.id)).length, 1);
+    assert.equal(plan.steps.length, 3);
+  }
+});
+
 test("branch evaluation considers combinations globally rather than choosing each local minimum", () => {
   // Locally a and b each prefer a different free prerequisite. Globally shared is one acquisition.
   const c = catalog({
@@ -318,7 +342,7 @@ test("ranking is deterministic, reports frontier truncation, and does not mutate
   assert.throws(() => planAcquisition(c, "toString"), /Unknown/);
 });
 
-test("real Passport catalog uses the existing PSA and School ID to obtain National ID first", () => {
+test("real Passport catalog recognizes the enrolled student route without an unnecessary National ID acquisition", () => {
   const result = actual({
     targetId: "passport",
     owned: ["psa", "school"],
@@ -328,8 +352,10 @@ test("real Passport catalog uses the existing PSA and School ID to obtain Nation
   assert.equal(result.status, "planned");
   assert.deepEqual(
     result.plans[0].steps.map((s) => s.id),
-    ["philsys", "passport"],
+    ["passport"],
   );
+  assert.ok(result.plans[0].steps[0].requirements.some((r) => r.documentId === "school"));
+  assert.ok(result.plans[0].steps[0].requirements.some((r) => r.id.includes("student-registration") && r.state === "missing"));
   const ready = actual({
     targetId: "passport",
     owned: ["psa", "philsys"],

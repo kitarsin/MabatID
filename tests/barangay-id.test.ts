@@ -13,7 +13,7 @@ import { evaluatePrepare, evaluateApplication } from "../src/lib/prepare";
 import { evaluateEligibility } from "../src/lib/eligibility";
 import { estimateFee, fitsBudget } from "../src/lib/prefs";
 import { normalizeProfile } from "../src/lib/profile";
-import { buildEdges, layoutTree } from "../src/lib/tree";
+import { buildEdges } from "../src/lib/tree";
 
 const asOf = "2026-11-17";
 const owned = new Set(["barangay-id"]);
@@ -53,16 +53,15 @@ function barangayPrep(age: number, facts: ProfileFacts) {
   );
 }
 
-test("Barangay ID leads Tier 1, is distinct from clearance, and School ID is no longer Tier 0", () => {
-  assert.equal(CARDS.filter((c) => c.tier === 1)[0].id, "barangay-id");
+test("Barangay ID is a distinct starter credential; School ID and civil records have separate groups", () => {
+  assert.equal(
+    CARDS.filter((c) => c.group === "supporting")[0].id,
+    "barangay-id",
+  );
   assert.equal(CARD_BY_ID["barangay-id"].starter, true);
-  assert.equal(CARD_BY_ID.barangay.tier, 0);
-  assert.equal(CARD_BY_ID.school.tier, 1);
+  assert.equal(CARD_BY_ID.barangay.group, "foundation");
+  assert.equal(CARD_BY_ID.school.group, "supporting");
   assert.notEqual(DETAILS["barangay-id"], DETAILS.barangay);
-  const positions = layoutTree()
-    .placed.filter((p) => p.card.tier === 1)
-    .sort((a, b) => a.x - b.x);
-  assert.equal(positions[0].card.id, "barangay-id");
 });
 
 test("starter route accepts LCRO evidence without a prior photo ID or enrollment", () => {

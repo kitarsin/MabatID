@@ -5,7 +5,7 @@ import { Check } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { EXTRA_DOCUMENTS } from "@/data/documents";
 import { Input } from "./ui/input";
-import { CARDS, TIER_META, type Tier } from "@/data/cards";
+import { CARDS, CREDENTIAL_GROUPS, GROUP_META } from "@/data/cards";
 import {
   BUDGETS,
   DEFAULT_BUDGET,
@@ -19,8 +19,7 @@ import type { DocumentEvidenceMap } from "@/lib/documents";
 import { BarangayIdFields } from "./BarangayIdFields";
 import { CardIcon } from "./icons";
 import { Logo } from "./Logo";
-
-const TIERS: Tier[] = [0, 1, 2, 3];
+import { GroupGuide } from "./GroupGuide";
 
 export function Onboarding({
   me,
@@ -97,18 +96,24 @@ export function Onboarding({
             1 · What do you already have?
           </h2>
           <p className="mb-3 text-sm text-muted-foreground">
-            Select current documents belonging to the applicant. Child’s
-            documents are listed separately. Check any validity or format
+            Select current items belonging to the applicant. The child’s birth
+            certificate has its own entry. Check any validity or format
             conditions with the issuing office.
           </p>
+          <div className="mb-4">
+            <GroupGuide />
+          </div>
           <div className="space-y-5">
-            {TIERS.map((t) => (
+            {CREDENTIAL_GROUPS.map((t) => (
               <fieldset key={t}>
                 <legend className="mb-2 text-xs font-bold uppercase tracking-wider text-civic">
-                  {TIER_META[t].label}
+                  {GROUP_META[t].label}
                 </legend>
+                <p className="mb-3 text-xs text-muted-foreground">
+                  {GROUP_META[t].blurb}
+                </p>
                 <ul className="space-y-2">
-                  {CARDS.filter((c) => c.tier === t).map((c) => (
+                  {CARDS.filter((c) => c.group === t).map((c) => (
                     <li key={c.id}>
                       <Row
                         role="checkbox"
@@ -131,25 +136,28 @@ export function Onboarding({
                     </li>
                   ))}
                 </ul>
+                {EXTRA_DOCUMENTS.some((d) => d.group === t) && (
+                  <>
+                    <p className="mb-2 mt-3 text-xs font-semibold text-muted-foreground">
+                      Other items you can record · no application guide
+                    </p>
+                    <ul className="space-y-2">
+                      {EXTRA_DOCUMENTS.filter((d) => d.group === t).map((d) => (
+                        <li key={d.id}>
+                          <Row
+                            role="checkbox"
+                            checked={owned.has(d.id)}
+                            onClick={() => toggle(d.id)}
+                            label={d.name}
+                            hint={d.groupReason}
+                          />
+                        </li>
+                      ))}
+                    </ul>
+                  </>
+                )}
               </fieldset>
             ))}
-            <fieldset>
-              <legend className="mb-2 text-xs font-bold uppercase text-civic">
-                Other documents
-              </legend>
-              <ul className="space-y-2">
-                {EXTRA_DOCUMENTS.map((d) => (
-                  <li key={d.id}>
-                    <Row
-                      role="checkbox"
-                      checked={owned.has(d.id)}
-                      onClick={() => toggle(d.id)}
-                      label={d.name}
-                    />
-                  </li>
-                ))}
-              </ul>
-            </fieldset>
           </div>
         </section>
 

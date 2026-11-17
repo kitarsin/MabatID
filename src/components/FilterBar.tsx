@@ -1,10 +1,17 @@
 "use client";
 
 import { useState } from "react";
-import { ListFilter, X } from "lucide-react";
-import { CARDS, CATEGORY_META, type Category, type Tier } from "@/data/cards";
+import { BookOpen, ListFilter, X } from "lucide-react";
+import {
+  CARDS,
+  CATEGORY_META,
+  CREDENTIAL_GROUPS,
+  GROUP_META,
+  type Category,
+} from "@/data/cards";
 import { BUDGETS } from "@/lib/prefs";
 import { CardKindFilter } from "./CardKindFilter";
+import { GroupDefinitions } from "./GroupGuide";
 
 import {
   matchSet,
@@ -23,48 +30,75 @@ export function FilterBar({
   onChange: (f: Filters) => void;
   context: FilterContext;
 }) {
-  const [open, setOpen] = useState(false);
+  const [panel, setPanel] = useState<"filters" | "groups" | null>(null);
   const n = activeFilterCount(filters);
   const shown = matchSet(filters, context)?.size ?? CARDS.length;
 
   return (
-    <div className="absolute right-3 top-3 z-20 flex w-[min(20rem,calc(100%-1.5rem))] flex-col items-end gap-2">
-      <button
-        type="button"
-        onClick={() => setOpen((o) => !o)}
-        aria-expanded={open}
-        className="inline-flex items-center gap-1.5 rounded-full bg-navy px-4 py-2.5 text-sm font-bold text-white shadow-md hover:bg-civic"
-      >
-        <ListFilter className="size-4" aria-hidden="true" />
-        Filter
-        {n > 0 && (
-          <span className="grid size-5 place-items-center rounded-full bg-amber text-xs font-extrabold text-navy">
-            {n}
-          </span>
-        )}
-      </button>
+    <div
+      className={`absolute right-3 top-3 flex w-[min(20rem,calc(100%-1.5rem))] flex-col items-end gap-2 ${panel ? "z-40" : "z-20"}`}
+    >
+      <div className="flex gap-2">
+        <button
+          type="button"
+          onClick={() =>
+            setPanel((current) => (current === "groups" ? null : "groups"))
+          }
+          aria-expanded={panel === "groups"}
+          className="inline-flex items-center gap-1.5 rounded-full bg-white px-3 py-2.5 text-sm font-bold text-civic shadow-md ring-1 ring-border"
+        >
+          <BookOpen className="size-4" aria-hidden="true" /> Groups
+        </button>
+        <button
+          type="button"
+          onClick={() =>
+            setPanel((current) => (current === "filters" ? null : "filters"))
+          }
+          aria-expanded={panel === "filters"}
+          className="inline-flex items-center gap-1.5 rounded-full bg-navy px-4 py-2.5 text-sm font-bold text-white shadow-md hover:bg-civic"
+        >
+          <ListFilter className="size-4" aria-hidden="true" />
+          Filter
+          {n > 0 && (
+            <span className="grid size-5 place-items-center rounded-full bg-amber text-xs font-extrabold text-navy">
+              {n}
+            </span>
+          )}
+        </button>
+      </div>
 
-      {open && (
+      {panel === "groups" && (
+        <section
+          aria-label="Credential group definitions"
+          className="max-h-[calc(100dvh-10rem)] w-full overflow-y-auto rounded-2xl bg-white p-4 shadow-xl ring-1 ring-border"
+        >
+          <h2 className="mb-3 text-base font-extrabold">
+            What do the groups mean?
+          </h2>
+          <GroupDefinitions />
+        </section>
+      )}
+      {panel === "filters" && (
         <div className="max-h-[calc(100dvh-10rem)] w-full space-y-4 overflow-y-auto rounded-2xl bg-white p-4 shadow-xl ring-1 ring-border">
           <CardKindFilter
             value={filters.kind}
             onChange={(kind) => onChange({ ...filters, kind })}
           />
-          <Group label="Tier (pick one or more)">
-            {([0, 1, 2, 3] as Tier[]).map((t) => (
+          <Group label="Credential group (pick one or more)">
+            {CREDENTIAL_GROUPS.map((t) => (
               <Chip
                 key={t}
-                on={filters.tiers.includes(t)}
+                on={filters.groups.includes(t)}
                 onClick={() =>
                   onChange({
                     ...filters,
-                    tiers: filters.tiers.includes(t)
-                      ? filters.tiers.filter((x) => x !== t)
-                      : [...filters.tiers, t].sort(),
+                    groups: filters.groups.includes(t)
+                      ? filters.groups.filter((x) => x !== t)
+                      : [...filters.groups, t].sort(),
                   })
                 }
               >
-                Tier {t}
+                {GROUP_META[t].label}
               </Chip>
             ))}
           </Group>

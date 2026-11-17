@@ -1,13 +1,14 @@
 import dagre from "@dagrejs/dagre";
 import { DETAILS } from "@/data/details";
 import { evaluateApplication, type ApplicationContext } from "./prepare";
-import { CARDS, CARD_BY_ID, type IdCard, type Tier } from "@/data/cards";
+import { CARDS, CARD_BY_ID, type IdCard } from "@/data/cards";
+import { EXTRA_DOCUMENTS } from "@/data/documents";
+import type { AcquisitionPlan } from "./planner/types";
 
 export type NodeStatus = "owned" | "available" | "locked";
 
-export const NODE_W = 112;
-export const NODE_H = 124;
-export const ROW_GAP = 190;
+export const NODE_W = 140;
+export const NODE_H = 204;
 
 export interface ReadinessContext extends ApplicationContext {
   prep?: Record<string, string[]>;
@@ -34,42 +35,7 @@ export interface TreeEdge {
   target: string;
   /** Document relationship only; nested route rules and cardinality live in the checklist. */
   kind: "all" | "any" | "optional";
-  /** parent and child share a tier row, so the line runs sideways */
-  side?: boolean;
 }
-
-/**
- * Hand-planned columns (1 unit = one node width) so every ID sits directly above,
- * or right beside, its main parent. That keeps straight lines short and tidy.
- * Cards missing from this map fall back to Dagre's computed order.
- */
-const GRID: Record<string, number> = {
-  // Tier 0 (bottom)
-  cedula: 2.25,
-  psa: 3.5,
-  barangay: 7.5,
-  // Tier 1
-  "barangay-id": 0,
-  school: 1,
-  nbi: 2,
-  npc: 3,
-  comelec: 4,
-  philhealth: 5,
-  tin: 6,
-  postal: 7,
-  // Tier 2 — philsys → lto → pagibig and philsys → mysss run sideways
-  pagibig: 1.5,
-  lto: 2.5,
-  philsys: 3.5,
-  mysss: 4.5,
-  passport: 5.5,
-  // Tier 3 (top)
-  prc: 2.5,
-  owwa: 5.5,
-  soloparent: 6.5,
-  pwd: 7.5,
-  senior: 8.5,
-};
 
 const edgeOf = (
   source: string,
@@ -81,7 +47,6 @@ const edgeOf = (
   source,
   target,
   kind,
-  side: CARD_BY_ID[source].tier === CARD_BY_ID[target].tier,
 });
 
 /** Derive document relationships from the same checklist evaluated by readiness. */
@@ -121,70 +86,142 @@ export function leadsTo(
     .map((e) => ({ card: CARD_BY_ID[e.target], kind: e.kind }));
 }
 
+export interface TreeCard extends IdCard {
+  inventoryOnly?: boolean;
+}
 export interface Placed {
-  card: IdCard;
+  card: TreeCard;
   x: number;
   y: number;
 }
 
-const TOP = 60;
-const COL = 116;
-export const rowY = (t: Tier) => TOP + (3 - t) * ROW_GAP; // Tier 0 sits at the BOTTOM
+/** Only selected evidence and prerequisites form a goal path. Catalog alternatives are not all mandatory. */
+export function planEdges(plan?: AcquisitionPlan): TreeEdge[] {
+  if (!plan) return [];
+  const edges = new Map<string, TreeEdge>();
+  for (const step of plan.steps) {
+    const inputs = [
+      ...step.prerequisites,
+      ...step.requirements.flatMap((t) => (t.documentId ? [t.documentId] : [])),
+    ];
+    for (const source of new Set(inputs)) {
+      if (
+        source === step.id ||
+        (!CARD_BY_ID[source] && !EXTRA_DOCUMENTS.some((d) => d.id === source))
+      )
+        continue;
+      const edge = edgeOf(
+        source,
+        step.id,
+        step.requirements.some(
+          (t) => t.documentId === source && t.state === "unknown",
+        )
+          ? "optional"
+          : "all",
+        "plan:",
+      );
+      edges.set(edge.id, edge);
+    }
+  }
+  return [...edges.values()];
+}
 
-export function layoutTree(): {
+/** Dependency layout. Credential-group metadata is deliberately never read for positioning. */
+export function layoutTree(plan?: AcquisitionPlan): {
   placed: Placed[];
   width: number;
   height: number;
   edges: TreeEdge[];
+  pathEdges: TreeEdge[];
 } {
-  const edges = buildEdges();
-  const g = new dagre.graphlib.Graph();
-  g.setGraph({
-    rankdir: "BT",
-    nodesep: 24,
-    ranksep: 90,
-    marginx: 0,
-    marginy: 0,
-  });
-  g.setDefaultEdgeLabel(() => ({}));
-  CARDS.forEach((c) => g.setNode(c.id, { width: NODE_W, height: NODE_H }));
-  edges.forEach((e) => g.setEdge(e.source, e.target));
-  dagre.layout(g);
-
-  // Fallback for any future card without a hand-planned column: use Dagre's x.
-  const gridMax = Math.max(...Object.values(GRID));
-  const dagreXs = CARDS.map((c) => g.node(c.id).x as number);
-  const dMin = Math.min(...dagreXs);
-  const colOf = (c: IdCard) =>
-    GRID[c.id] ?? ((g.node(c.id).x as number) - dMin) / COL;
-
-  const placed: Placed[] = CARDS.map((c) => ({
-    card: c,
-    x: colOf(c) * COL,
-    y: rowY(c.tier),
-  }));
-  const width = (Math.max(gridMax, ...placed.map((p) => p.x / COL)) + 1) * COL;
-  return { placed, width, height: rowY(0) + NODE_H + 30, edges };
-}
-
-export const TIER_COUNTS: Record<Tier, number> = {
-  0: CARDS.filter((c) => c.tier === 0).length,
-  1: CARDS.filter((c) => c.tier === 1).length,
-  2: CARDS.filter((c) => c.tier === 2).length,
-  3: CARDS.filter((c) => c.tier === 3).length,
-};
-
-export function levelTitle(owned: ReadonlySet<string>): string {
-  const top = Math.max(
-    -1,
-    ...CARDS.filter((c) => owned.has(c.id)).map((c) => c.tier),
-  );
-  return (
-    [
-      "Foundation Builder",
-      "First-ID Holder",
-      "Primary-ID Holder",
-      "Specialist",
-    ][top] ?? "Just starting"
-  );
+  const relationships = buildEdges();
+  const path = planEdges(plan);
+  const cards: TreeCard[] = [...CARDS];
+  for (const doc of EXTRA_DOCUMENTS)
+    if (path.some((e) => e.source === doc.id || e.target === doc.id))
+      cards.push({
+        ...doc,
+        short: doc.name,
+        icon: "receipt",
+        category: doc.kind === "document" ? "foundation" : "supporting",
+        minAge: 0,
+        inventoryOnly: true,
+      });
+  const adjacency = new Map(cards.map((c) => [c.id, new Set<string>()]));
+  const included: TreeEdge[] = [];
+  function reaches(
+    source: string,
+    target: string,
+    visited = new Set<string>(),
+  ): boolean {
+    if (source === target) return true;
+    if (visited.has(source)) return false;
+    visited.add(source);
+    return [...(adjacency.get(source) ?? [])].some((next) =>
+      reaches(next, target, visited),
+    );
+  }
+  // Prefer real selected-plan constraints; add only compatible overview links afterwards.
+  for (const edge of [
+    ...path,
+    ...relationships.filter((e) => CARD_BY_ID[e.target].parent === e.source),
+  ]) {
+    if (
+      adjacency.get(edge.source)?.has(edge.target) ||
+      reaches(edge.target, edge.source)
+    )
+      continue;
+    adjacency.get(edge.source)?.add(edge.target);
+    included.push(edge);
+  }
+  function place(subset: TreeCard[], constraints: TreeEdge[], offset = 0) {
+    if (!subset.length) return { placed: [] as Placed[], width: 0, height: 0 };
+    const members = new Set(subset.map((c) => c.id));
+    const g = new dagre.graphlib.Graph();
+    g.setGraph({
+      rankdir: "BT",
+      nodesep: 32,
+      ranksep: 90,
+      marginx: 36,
+      marginy: 40,
+    });
+    g.setDefaultEdgeLabel(() => ({}));
+    subset.forEach((c) => g.setNode(c.id, { width: NODE_W, height: NODE_H }));
+    constraints
+      .filter((e) => members.has(e.source) && members.has(e.target))
+      .forEach((e) => g.setEdge(e.source, e.target));
+    dagre.layout(g);
+    return {
+      placed: subset.map((card) => ({
+        card,
+        x: offset + g.node(card.id).x - NODE_W / 2,
+        y: g.node(card.id).y - NODE_H / 2,
+      })),
+      width: g.graph().width,
+      height: g.graph().height,
+    };
+  }
+  if (plan) {
+    const selected = new Set([
+      ...path.flatMap((e) => [e.source, e.target]),
+      ...plan.steps.map((s) => s.id),
+    ]);
+    const focus = place(
+      cards.filter((c) => selected.has(c.id)),
+      path,
+    );
+    const rest = place(
+      cards.filter((c) => !selected.has(c.id)),
+      included,
+      focus.width + 160,
+    );
+    return {
+      placed: [...focus.placed, ...rest.placed],
+      width: focus.width + 160 + rest.width,
+      height: Math.max(focus.height, rest.height),
+      edges: included,
+      pathEdges: path,
+    };
+  }
+  return { ...place(cards, included), edges: included, pathEdges: path };
 }

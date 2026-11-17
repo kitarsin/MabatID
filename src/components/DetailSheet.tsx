@@ -23,7 +23,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
   CARD_BY_ID,
   CARD_KIND_META,
-  TIER_META,
+  GROUP_META,
   type IdCard,
 } from "@/data/cards";
 import { DETAILS } from "@/data/details";
@@ -48,6 +48,7 @@ import { leadsTo } from "@/lib/tree";
 import { FactQuestions } from "./FactQuestions";
 import { CardIcon } from "./icons";
 import { Rich } from "./Rich";
+import type { PlanningView } from "@/lib/use-tree-planning";
 import { AcquisitionPlan } from "./AcquisitionPlan";
 
 export function DetailSheet({
@@ -62,7 +63,7 @@ export function DetailSheet({
   documents,
   onSetDocument,
   mode: savedMode,
-  modes: savedModes,
+  planning,
   tracking,
   priority,
   onToggleTrack,
@@ -87,7 +88,7 @@ export function DetailSheet({
   documents: DocumentEvidenceMap;
   onSetDocument: (id: string, value: DocumentEvidence) => void;
   mode?: Mode;
-  modes: Record<string, Mode>;
+  planning: PlanningView;
   tracking: string[];
   priority: string | null;
   onToggleTrack: (id: string) => void;
@@ -123,6 +124,9 @@ export function DetailSheet({
     state?.eligibility.checks.flatMap((c) => (c.fact ? [c.fact] : [])) ?? [];
   if (d)
     for (const entry of d.req.prepare) {
+      if ("either" in entry)
+        for (const route of entry.either)
+          if (route.when) questions.push(...conditionFacts(route.when, age));
       const items =
         "either" in entry ? entry.either.flatMap((r) => r.items) : [entry];
       for (const item of items) {
@@ -165,12 +169,21 @@ export function DetailSheet({
               tabIndex={-1}
               className="flex-1 space-y-6 overflow-y-auto px-5 py-5 outline-none"
             >
-              <Section n={1} title="About this ID">
+              <Section n={1} title={`About this ${itemNoun}`}>
                 <dl className="space-y-3 text-[15px]">
                   <Info label="Purpose">
                     <Rich text={d.purpose} />
                   </Info>
-                  <Info label="Tier">{TIER_META[card.tier].label}</Info>
+                  <Info label="Credential group">
+                    <p className="font-bold">{GROUP_META[card.group].label}</p>
+                    <p className="mt-1 text-sm text-muted-foreground">
+                      {GROUP_META[card.group].blurb}
+                    </p>
+                  </Info>
+                  <Info label="Why it belongs here">{card.groupReason}</Info>
+                  <Info label="What this group means">
+                    {GROUP_META[card.group].significance}
+                  </Info>
                   <Info label="Type">{CARD_KIND_META[card.kind].singular}</Info>
                   <Info label="Issued by">{d.issuedBy}</Info>
                   {d.processingTime && (
@@ -207,21 +220,17 @@ export function DetailSheet({
               </Section>
               <AcquisitionPlan
                 key={card.id}
-                targetId={card.id}
-                owned={owned}
-                age={age}
                 facts={facts}
-                documents={documents}
-                prep={prep}
-                modes={savedModes}
-                budget={budget}
-                setup={setup}
+                view={planning}
                 signedIn={signedIn}
                 onOpen={onJump}
                 onSetFact={onSetFact}
                 onFollow={(plan) => {
                   for (const step of plan.steps)
-                    onSetMode(step.id, step.mode === "hybrid" ? "online" : step.mode);
+                    onSetMode(
+                      step.id,
+                      step.mode === "hybrid" ? "online" : step.mode,
+                    );
                   if (signedIn && !obtained && !tracking.includes(card.id))
                     onToggleTrack(card.id);
                   if (plan.steps[0]) onJump(plan.steps[0].id);

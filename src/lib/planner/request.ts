@@ -166,6 +166,21 @@ export function parsePlanningInput(value: unknown): PlanningInput {
   };
 }
 
+/** Same allowlist and limits as a single-goal request; the tree may have no selected goal. */
+export function parseTreeInput(
+  value: unknown,
+): Omit<PlanningInput, "targetId"> & { targetId?: string } {
+  const raw = record(value, "request");
+  const parsed = parsePlanningInput({
+    ...raw,
+    targetId: raw.targetId === undefined ? "philsys" : raw.targetId,
+  });
+  return {
+    ...parsed,
+    targetId: raw.targetId === undefined ? undefined : parsed.targetId,
+  };
+}
+
 export async function readPlanningRequest(request: Request): Promise<unknown> {
   if (
     request.headers.get("content-type")?.split(";")[0].trim().toLowerCase() !==
