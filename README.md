@@ -1,202 +1,80 @@
-# MabatID
+<p align="center">
+  <img src="src/app/icon.svg" alt="MabatID logo" width="72" height="72" />
+</p>
 
-A Next.js app for exploring Philippine ID requirements and tracking applications.
+<h1 align="center">MabatID</h1>
 
-```sh
-npm ci
-npm run dev
-```
+<p align="center"><strong>One step unlocks the next.</strong></p>
+<p align="center">A clearer path from baseline documents to Philippine government IDs.</p>
 
-Development and production builds use Turbopack (`next dev` / `next build`). The Next.js development indicator is enabled during development and is absent from production builds.
+<p align="center">
+  <a href="#features">Features</a> ·
+  <a href="#how-it-works">How it works</a> ·
+  <a href="#contributors">Contributors</a> ·
+  <a href="#feedback">Feedback</a>
+</p>
 
-Open the localhost URL printed by Next.js. Validation:
+## About
 
-```sh
-npm test
-npm run lint
-npx tsc --noEmit
-npm run build
-```
+Getting your first valid ID can feel circular: you need an ID to apply for another ID. **MabatID** helps students, young adults and first-time jobseekers understand where to start, what to prepare, and which documents can unlock their next application.
 
-## Current scope
+Explore an interactive ID path, compare application routes, and follow practical checklists based on the documents you already have. Try it as a guest, or create a profile to save your progress.
 
-The app supports device profiles, document ownership, eligibility answers, acquisition planning, target tracking, requirements checklists and application progress. Any ID can be tracked before its prerequisites are ready. Ownership can be recorded independently of the acquisition procedure.
+MabatID is an independent guidance project and is not affiliated with a government agency. Requirements, fees and acceptance can vary by office and change over time; confirm the latest details with the issuing agency before applying.
 
-Device profiles are **not authenticated accounts**. They use browser localStorage, are accessible to anyone using that browser, and do not sync. No passwords or email addresses are collected. Manual JSON backup and restore moves saved profiles between devices without an account or storage service.
+## Features
 
-On first load, v1 mock accounts migrate to credential-free profiles. Names, ages, documents and goals are retained. Password hashes and email addresses are removed from browser storage after the replacement is saved. Positional v1 checklist ticks are reset because their meaning changed; migrated profiles show a review notice.
+- **Interactive ID path** — Explore connected IDs and documents, pan and zoom through the graph, and open a guide from any supported target.
+- **Personalized planning** — Find routes from your current documents to a target ID, compare alternatives, and prioritize fewer documents or lower estimated fees.
+- **Search and filters** — Browse IDs and documents by type, purpose, estimated cost and application preference.
+- **Application guides** — Review prerequisites, eligibility questions, estimated fees, application channels and preparation steps.
+- **Progress tracking** — Save what you already have, track goals, choose a priority ID and work through application checklists.
+- **Profiles and guest previews** — Save your IDs, preferences and progress, or explore the ID path before creating a profile.
+- **Backup and device transfer** — Export and restore JSON backups, review differences before replacing progress, or move a profile with an expiring transfer code.
+- **Weekly likes and private feedback** — Leave a weekly like, or use a completed device profile to submit an optional star rating and feedback from Settings.
 
-## Rules and progress
+The catalog currently includes **21 acquisition guides** and **9 supplementary inventory items**. Credential groups describe an item's purpose; they are not difficulty levels or a requirement to collect every ID.
 
-- `src/data/cards.ts` contains presentation metadata and illustrative overview parents, not prerequisite rules.
-- `src/data/details.ts` contains the shared requirement and procedure definitions. Requirement, route and step IDs are authored stable identifiers; never generate them from text or array indices.
-- `src/data/documents.ts` defines supplementary documents. `child:psa` is separate from the applicant's certificate; UMID is separate from MySSS Card.
-- `src/data/facts.ts` defines self-reported facts. Missing answers mean unknown, not false.
-- `src/lib/eligibility.ts` evaluates age and modeled eligibility conditions.
-- `src/lib/prepare.ts` evaluates requirements, active application routes, step dependencies and progress. The tree, detail sheet and progress views consume this shared evaluation.
-- `src/lib/tree.ts` derives document relationships from requirements. The overview shows illustrative connections. Selecting a goal highlights only the evidence and acquisitions in the chosen computed plan; other targets remain available on the canvas.
-- `src/lib/planner/catalog.ts` adapts the same structured requirements and effective checklist state for the planner. Credential groups, visual parents, and browsing filters never determine eligibility or dependencies.
+## How it works
 
-AND applies across required checklist entries; OR groups require one entire route; `min` counts distinct selected documents. Conditional requirements are omitted only after their condition is known to be false. Document ownership does not automatically attest photocopies, remaining validity periods, or combined supporting evidence when a confirmation is required.
+1. **Start with what you have.** Select existing IDs and documents, then answer relevant eligibility questions.
+2. **Choose a goal.** Explore suggested next IDs or select a specific target from the tree or Browse view.
+3. **Compare your options.** Review document requirements, remaining questions, application routes and estimated fees.
+4. **Prepare and track.** Follow the checklist and record progress as you complete each step.
 
-Budget filters compare the upper end of modeled fee ranges and do not assume conditional waivers or confirm payment. Route-specific estimates and conditional replacement/income fees are used where modeled. Unknown conditions retain the full estimated range. A preference for online applications never removes a required visit or blocks viewing a guide.
+Under the hood, the planner works backward from a target through **AND / OR / at-least-N requirements**, detects circular dependencies, and orders the chosen route using topological sorting. Search is bounded, and the interface discloses incomplete exploration. Unknown eligibility stays a question rather than being treated as confirmed.
 
-Hybrid procedures require online preparation followed by the in-person phase. Alternative procedures count only the explicitly selected route. Preliminary booking steps can start before requirements are complete; designated submission steps require preparation. Later steps depend on preceding steps. Undoing an upstream step clears its downstream completion on the active procedure. Progress reaches 100% only after the user confirms ownership.
+## Tech stack
 
-## Acquisition planner and API
-
-Keep the planner in this repository while the website is its only consumer. `src/lib/planner/engine.ts` is framework-independent TypeScript with serializable contracts in `types.ts`. The catalog adapter, Next.js transport, and client UI are separate; the engine can become a shared package or service later without duplicating requirement rules now.
-
-The tree and guide share one debounced response from `POST /api/plans/tree`. Without a target, this returns personalized suggestions and assessments for all 21 guided targets. With `targetId`, it also returns full alternatives for that goal. `POST /api/plans/preview` remains available for a single-goal result. The plan uses backward chaining with depth-first traversal, AND/OR and distinct-document threshold evaluation, branch comparison across complete candidate plans, stack-based cycle detection, and Kahn's topological sorting. Shared prerequisite acquisitions and their modeled fees count once. A circular alternative is rejected individually, allowing an acyclic route to succeed.
-
-The preview ranks confirmed eligibility, fewer unanswered conditions, and better per-item budget fit first. The selected objective then prioritizes fewer acquisitions or lower modeled maximum fees. Application preference breaks remaining ties; required visits are retained. Explicitly saved application modes constrain those routes. Unknown conditions and outside documents remain questions; they never become assumed eligibility or automatic ownership. Existing-only IDs without supported issuance guidance are not invented as acquisition steps.
-
-Selected-goal search is bounded to 18,000 exploration operations and a frontier of 48 candidates, returning up to three nonredundant alternatives. Other targets use 6,000 operations, a frontier of 24, and one result each. A small initial pass seeks a feasible complete path before alternative exploration; this preserves a valid candidate if later search exhausts its budget. Any operation or frontier truncation sets `search.complete` to false and the UI discloses the limited search. Rankings are best among explored candidates, not a guarantee of global optimality. If no complete candidate survives an exhausted search, status is `incomplete`, not `blocked`. `planned` means a dependency path was found; ordinary missing preparation still appears in its checklist.
-
-Example request:
-
-```json
-{
-  "targetId": "passport",
-  "owned": ["psa", "school"],
-  "age": 20,
-  "facts": { "enrolled": true, "waiverRequested": false },
-  "objective": "fewest-documents"
-}
-```
-
-Optional request fields are `documents` (date/format evidence only), `prep` (stable checklist keys), `modes`, `budget`, and `setup`. The API validates known catalog IDs, facts, checklist keys, modes, and scalar values; rejects unknown fields; accepts only JSON up to 64 KiB; and returns `Cache-Control: no-store`. Invalid input returns 400, oversized input 413, and unsupported media types 415. Callers cannot override the server date, catalog version, or search limits. The response includes ordered steps, prerequisite edges, chosen branches, eligibility/requirement states, procedure phases, fee estimates, questions, and diagnostics.
-
-The client debounces changes and cancels stale requests. Users can compare alternatives, expand requirements and procedures, and open any prerequisite guide. **Start with …** applies the chosen application modes, tracks the final goal for a device profile, and opens the first guide. Requirement alternatives remain suggestions; they are not stored as a frozen plan. Recommendations are recalculated as documents and answers change. Starting a path never marks a document as owned or ticks a preparation task.
-
-Both endpoints are stateless and do not save profiles. They receive only the allowlisted planning fields, without names, ID numbers, document scans, email addresses, or credentials. Manual JSON backups move saved progress between devices; these endpoints provide neither profile storage nor synchronization.
-
-## ID and document filters
-
-Every catalog entry has an explicit `kind` (`id` or `document`), independent of its credential group and significance category. Identity cards and passports are IDs; birth certificates, Barangay Clearance, Cedula, NBI/Police Clearance and Voter’s Certification are documents. This is a browsing classification, not a guarantee of agency acceptance.
-
-The tree and Browse views share **All types / IDs only / Documents only**. Type combines with the existing filters; the tree's active count and Clear action include it. Browse search and category filters also respect the selected type. Nonmatching tree nodes are dimmed so document prerequisites remain available for context. Type badges and detail labels identify each item, and mixed totals use “items”.
-
-## Skill tree and credential groups
-
-The interactive skill tree remains the main interface: circular nodes, branches, pan/zoom, and tap-to-open guides. It has no numbered levels or fixed difficulty rows. Overview connections are illustrative, not a list of mandatory prerequisites. A selected goal focuses the computed route, marks existing evidence, and labels multiple required inputs with **AND**. Switching alternatives in either the guide or the tree updates both. Supplementary inventory evidence appears in a path when used, without inventing an acquisition guide for it.
-
-**Suggested next IDs** compares explored paths using the applicant's inventory and answers. Recorded IDs and known-ineligible targets are excluded. Ranking prioritizes confirmed eligibility, fewer unanswered conditions and budget fit, followed by the chosen objective (fewer acquisitions or lower modeled maximum fees), then application preference. This estimates preparation burden, not guaranteed speed or universal ease. Each suggestion explains its remaining prerequisites or confirmations, and bounded searches are disclosed. Editing the starting point or eligibility answers recalculates the suggestions. Visitors can try their own inventory without a profile; their edits last for the current visit only.
-
-Credential groups describe purpose, not difficulty, value, or acquisition order. They do not determine graph positions, eligibility, dependency edges, or recommendation scores. Definitions live in `GROUP_META` in `src/data/cards.ts`; every target and supplementary inventory item has `group` and `groupReason`. The **Groups** control, Browse, inventory editing, Progress, and detail sheets explain the classifications.
-
-| Group | Meaning | Guided targets |
-| --- | --- | --- |
-| **Foundational documents** | Civil, academic, residency and other baseline supporting records. These establish application details rather than serve as standalone photo IDs. | PSA Birth Certificate; Barangay Clearance / Certificate of Residency; Cedula |
-| **Starter & supporting credentials** | Early identity options, routine school, employer, tax and health IDs, and supporting clearances. Their eligibility and document conditions still apply. | Barangay ID; School ID; PhilHealth ID; BIR TIN ID; NBI Clearance; National Police Clearance; COMELEC Voter's Certification |
-| **Widely accepted identity credentials** | General identity credentials used across institutions. Acceptance remains specific to the receiving agency, transaction, format and validity. Some can be first-ID options. | Postal ID; PhilSys National ID; Philippine ePassport; LTO Non-Professional Driver's License |
-| **Specialized & service credentials** | Professional, benefit, status and membership credentials. Pursue these when relevant and eligible; this is not a final level everyone should complete. | MySSS Card; Pag-IBIG Loyalty Card Plus; PRC PIC; PWD ID; Solo Parent ID; OWWA e-Card; Senior Citizen ID |
-
-Classify future entries by their main role and documented acceptance, recording a reason. Fees, age, prerequisite counts and issuing agency do not determine the group. Separate badges can describe overlapping roles: PRC retains **Widely accepted**, while Barangay ID and Postal ID retain starter badges. [Pag-IBIG Circular 450](https://www.pagibigfund.gov.ph/document/pdf/circulars/provident/Circular%20No.%20450%20-%20Modified%20Guidelines%20on%20the%20Availment%20of%20the%20Pag-IBIG%20Fund%20Loyalty%20Card%20Plus.pdf) says Loyalty Card Plus is not considered a government ID; its `id` classification here describes a membership/service card, not universal government-ID acceptance.
-
-The nine supplementary records remain inventory evidence: LCRO Birth Certificate, lease/rental contract, voter registration record, utility bill, Form 137, child's PSA Birth Certificate and First-Time Jobseeker Barangay Certification are foundational; Company ID is supporting; legacy UMID is a widely accepted identity credential for existing holders. Progress counts all 30 inventory items. The tree and Browse expose 21 supported acquisition guides. These counts are a reference, not a goal to collect everything. Existing profile ownership, checklist keys and saved application modes keep their stable IDs.
-
-The passport rules also model the conditional student route: School ID and, for adult students, Certificate of Registration. Unanswered enrollment remains a question and a negative answer removes that route. See the [DFA embassy acceptable-ID guidance](https://www.philippine-embassy.org.sg/list-of-acceptable-valid-ids-for-passport-application/); receiving-office screening and the rest of the passport checklist still apply.
-
-## Barangay ID starter card
-
-Barangay ID (`barangay-id`) leads the starter/supporting group and stays separate from Barangay Clearance (`barangay`). School ID is supporting evidence; baseline paper records belong to the foundational group. Recommendations use the applicant’s current information rather than always starting everyone at Barangay ID.
-
-The card includes local eligibility/residency confirmation, adult-only conditional Cedula, printed-photo versus live-capture requirements, guardian paperwork, replacement evidence, and explicitly confirmed local waivers. An online route requires confirmation that the applicant’s own barangay offers it; no citywide availability, same-day release or fee exemption is assumed.
-
-`src/lib/documents.ts` and `BarangayIdFields` store only issue/expiry dates and self-reported format checks. Selecting ownership does not establish current validity. Cards without a printed expiry remain **Needs confirmation** until an issue date and local validity confirmation are recorded. No one-, two- or three-year expiry is invented. Expired cards cannot auto-satisfy document requirements.
-
-Verified acceptance is scoped: PSAHelpline’s online delivery ID requires photo and signature; PhilSys has an alternative Barangay ID route requiring its specified card details; Postal ID accepts Barangay Residency ID as address evidence, with identity and copies still separate. Barangay ID is not added to the DFA passport ID list. Bank/e-wallet acceptance remains provider-specific.
-
-Source references are embedded in the card: [PSAHelpline delivery IDs](https://psahelpline.ph/faq/Delivery), [PSA PhilSys Charter](https://rsso05.psa.gov.ph/system/files/documents/2024%20CC%20-%20PhilSys_Updated%20with%20Brief%20Description%20%281%29.pdf), [Postal ID requirements](https://www.postalidph.com/requirements.html), [RA 7160](https://www.lawphil.net/statutes/repacts/ra1991/ra_7160_1991.html), [RA 11261](https://www.lawphil.net/statutes/repacts/ra2019/ra_11261_2019.html), and [BSP Circular 950](https://www.bsp.gov.ph/Regulations/Issuances/2017/c950.pdf). Locally varying fees and release/validity periods are guidance estimates from the supplied research, pending the applicant’s barangay charter.
-
-## Before production
-
-The research catalog is provisional. References are included, but fees, eligibility, document acceptance, local variations, and all procedures still need an authoritative review and versioned source records. Passing software tests establishes consistent behavior, not government acceptance.
-
-Server authentication and a persistent database remain future backend work. Before exposing the planning endpoints publicly, add deployment-level rate limits and resource monitoring; its per-request search and body limits do not limit request volume.
-
-## Manual profile backup and restore
-
-Open **Settings → Backup & restore**, or **Open device profile → Bring your progress → Import a file** before creating a profile. Select any saved profile and download its JSON backup. On the other browser/device, select that file, review its identity/content and differences, and import it. Selecting or canceling a file changes no saved data. Files are read locally; no backup service, login, email, transfer-code service, or cloud storage is involved. Backups contain personal information, are **not encrypted**, and do **not continuously synchronize** devices. Keep files private. Code-based device transfer is a separate, explicitly online option described below. Clearing browser storage still deletes local profiles and local undo data; keep a separate file backup.
-
-### Format and validation
-
-Format version 1 is an object with `format: "mabatid-profile-backup"`, `version: 1`, informational ISO `exportedAt`, `profile`, `contentHash`, and optional `revision`. The profile holds the permanent `id`, nickname (`name`), applicant age, creation/setup/review metadata, owned document IDs, document issue/expiry dates and format confirmations, eligibility answers (`facts`), budget/application preferences, tracked goals/priority, stable checklist keys (`prep`), and chosen application routes (`modes`). Computed recommendations are excluded and recalculated from these inputs and the current catalog. The active selection, unrelated profiles and replacement undo snapshot are not exported.
-
-The content fingerprint is SHA-256 of UTF-8 canonical JSON from `profileContent` in `src/lib/revisions.ts`: sorted object keys, sorted/deduplicated set arrays, explicit defaults, and omitted empty map entries. Whitespace, JSON key order, list order, and export time do not change content identity. Each revision has `nonce` (random UUID), `parents` (zero to two revision IDs), `contentHash`, and `id`. Its ID is SHA-256 of canonical `{ profileId, nonce, parents, contentHash }`. This binds ancestry to content and permanent identity. Fingerprints detect damage and inconsistent metadata; they are not signatures or proof of authenticity. Someone who controls a file can deliberately recompute them.
-
-Files are limited to **1 MiB**, depth 12, 20,000 visited values, 256 object entries, 512 array entries, 2,048-character strings (individual fields have tighter limits), and 64 revision nodes. Invalid JSON, unsafe property names, wrong field types, invalid document dates, unsupported format versions, and content-fingerprint mismatches are rejected before saving. Missing/invalid/content-mismatched revision metadata is explicitly reported as unreliable and requires acknowledgment; it cannot establish freshness. Obsolete/unrecognized catalog IDs, checklist keys, evidence fields, answers and preferences are listed for review. Importing a sanitized profile requires acknowledgment and records a new revision when its prior history no longer matches its content. Invalid raw files cannot silently reset existing profiles.
-
-### Comparison, replacement and undo
-
-Profiles match by permanent ID, never nickname. Renaming preserves identity; **Keep both** assigns a new permanent ID and independent root revision. The shared engine compares validated revision ancestry:
-
-| Evidence | Result |
+| Area | Technology |
 | --- | --- |
-| Same saved content | Already up to date |
-| Incoming history contains current revision | Imported version is newer |
-| Current history contains incoming revision | Backup is older |
-| Complete histories diverge after a shared revision | Conflict |
-| Missing, invalid, unrelated, or insufficient/pruned ancestry | Cannot reliably determine freshness |
+| Application | Next.js 16 App Router, React 19, TypeScript 5 |
+| Styling | Tailwind CSS 4, shared design tokens and CSS animations |
+| UI components | Base UI, shadcn/ui, Lucide icons |
+| Interactive graph | React Flow (`@xyflow/react`) and Dagre |
+| Planning | Custom TypeScript requirement evaluator and bounded search engine |
+| Data and services | Supabase Postgres, browser storage, Web Locks and Web Crypto |
+| Testing and tooling | Node.js test runner, `tsx`, ESLint and Turbopack |
 
-Neither device clocks, file dates, export dates, document counts, checklist totals, nor incrementing counters decide freshness. A newly exported file can contain older progress, and a newer revision can remove IDs or uncheck tasks. Meaningful normalized edits create revisions; no-op updates, selection changes and exports do not. History is bounded to the 64 nearest reachable nodes, retaining both parents of a resolution before older ancestors. Pruning may make comparison uncertain; direct proven ancestry still works across a pruned boundary when the relevant nodes remain. No automatic content merging occurs.
+## Feedback
 
-Preview shows additions/removals, nickname/age/metadata, changed answers/preferences, document evidence, routes, goals and checklist changes. Every replacement requires an explicit checkbox confirmation, even if newer. Older/conflicting/unknown versions can be chosen deliberately. Newer versions preserve their incoming revision; explicit rollback or conflict/unknown resolution creates a new revision descending from the current head and, when valid, the incoming head. Cancel leaves storage untouched. Commit rechecks the target, including its revision metadata; if it changed or appeared/disappeared after preview, review again. Unrelated profiles are retained.
+Anyone can leave a weekly like from the **Rates & Feedbacks** section. After completing profile setup, users can submit written feedback and an optional 1–5 star rating from **Settings**.
 
-One previous replacement snapshot is stored locally with the profiles and survives reload. **Undo last replacement** restores only that profile's content as a new revision. It is disabled after any later meaningful edit to that profile (even if an edit later restores identical content). Changing another profile or the active selection does not invalidate undo. Another replacement replaces the single undo snapshot. File backups do not include undo snapshots.
+Feedback is private to the MabatID team. Please leave out ID numbers, document scans and other sensitive personal information.
 
-### Persistence and integration
+## Contributors
 
-Profiles, active selection, revision ancestry and the one undo snapshot are saved atomically in `mabatid.profiles.v3`. Existing v2 profiles are migrated with identities, ownership/evidence, stable progress, preferences and active selection intact; the original v2 keys are retained as migration recovery data and are not updated afterward. Legacy v1 mock profiles keep valid stable keys, discard obsolete positional ticks and receive a review notice; legacy credential records are removed only after the new record saves. Failed/corrupt migrations leave their sources untouched. Clearing only v3 manually can therefore expose the older v2 recovery data on the next migration.
+| Contributor | Role | Contributions |
+| --- | --- | --- |
+| **[Xavier Imbang](https://github.com/sagembng)** | Product Lead & Frontend Designer | Product concept, frontend design, user experience, prerequisite research and application guides. |
+| **[Kristian Lawrence Villaraza](https://github.com/kitarsin)** | Backend & Database Engineer | Backend services, database, planning logic, prerequisite modeling, category filtering and APIs. |
 
-Writes require **Web Locks** and Web Crypto in a secure context (HTTPS or localhost). Cooperating tabs serialize the complete read/check/write transaction under `mabatid-profile-storage`, use current durable data, reject stale target edits (including full-form edits checked against the version that initialized the form), and refresh on storage/focus events. An additional raw-storage check rejects changes during asynchronous work. Storage denial/quota errors leave the saved record intact and the app publishes no successful candidate state. External tools and older app versions are not supported concurrent writers; they may ignore locks or discard newer record fields; avoid running old and new app versions against the same browser storage. The localStorage record is atomic, but browser storage is not a durable server database.
+## Report an issue
 
-`src/lib/backup.ts` handles the transport-independent envelope/validation/differences; `revisions.ts` handles content identity and ancestry; `profile-repository.ts` owns migration, preview, transactional commits and undo. A future transfer-code service should return this same JSON envelope and call the same preview/commit flow. It must never write profiles directly. The transfer-code interface uses this same envelope and review component through the temporary relay described below.
+Found a bug or an outdated requirement? Open a [GitHub issue](https://github.com/sagembng/MabatID/issues) with a description of the problem. For guide corrections, include the issuing agency's source and any relevant location or applicant conditions.
 
-Settings renders the reusable adapter below. Other client screens can use the same integration:
+Technical setup and maintenance notes are available in the team's [technical reference](docs/technical-reference.md).
 
-```tsx
-// Inside an existing client Settings component, under StoreProvider:
-import { ProfileBackupRestore } from "@/components/BackupRestorePanel";
+## License
 
-// Render wherever Settings wants its backup section:
-<ProfileBackupRestore />
-```
-
-For another host or tests, render `<BackupRestorePanel controller={controller} onImported={onImported} />`. The `BackupRestoreController` type in `src/lib/store.tsx` specifies saved `users`, `activeId`, `undoSnapshot`, `downloadBackup(id)`, `previewBackup(json)`, `commitBackup(preview, choice, { confirmed, acknowledged })` and `undoReplacement(token)`. Reads produce no profile mutations; commits return `null` only after persistence succeeds, otherwise an error string. `onImported` runs only after successful persistence. Callbacks must be passed within a client boundary.
-
-The `npm test` suite includes complete round trips, removals/corrections, misleading export dates and reversed clocks, conflicts, missing/tampered/pruned history, renamed and separate identities, no-op saves, validation limits, catalog sanitization, migration and storage failure, concurrent/stale writes, targeted replacement, keep-both and undo after reload.
-
-
-## One-time device transfer codes
-
-Open **Settings → Move to another device**, or **Open device profile → Bring your progress → Use a code** to receive progress before creating a profile. Select any saved profile and choose **Make a code**, then enter the grouped 12-character code on another device and choose **Review transfer**. The recipient does not need a profile first. The same `ImportReview` component and repository preview/commit engine handle files and codes: identity checks, ancestry comparisons, detailed differences, sanitization acknowledgment, replace/keep-both decisions, explicit replacement confirmation, stale-target checks and persistent undo. **Keep current profile** finishes a transfer whose content is already identical, without creating a revision.
-
-Settings hosts `<ProfileBackupRestore />` and `<ProfileTransfers />` as separate sections; another client screen can render `<TransferPanel controller={controller} />` using the same store controller.
-
-Creating a code snapshots the selected durable profile; later edits require a new code. Codes expire after ten minutes according to database time. Browser countdowns are informational and use elapsed monotonic time; neither their clock nor transfer expiry determines profile freshness. Codes are cryptographically random (unbiased selection from the readable alphabet) and grouped as `XXXX-XXXX-XXXX`. No accounts, passwords, emails or automatic synchronization are introduced. `@supabase/supabase-js` is used only by the server; `@supabase/ssr` is installed as requested but is not needed for this account-free relay.
-
-Unlike file import, generating a code temporarily uploads the backup through MabatID's server to Supabase. The server encrypts it with AES-256-GCM before storing it. Encryption and code/owner/claim HMAC fingerprints use separate derivation domains from the server's transfer secret. The authenticated encrypted bundle includes its transfer ID and readable code, both verified against the lookup context; swapped database ciphertext is rejected before returning any backup. Idempotent creation also requires the exact original snapshot. The database stores ciphertext and fingerprints, not readable codes or browser claim credentials. **This is not end-to-end encryption: the MabatID server can decrypt the payload.** Anyone holding the code can attempt to retrieve it. The UI explains this upload before code creation. Backups downloaded as files remain unencrypted.
-
-A receiving browser generates a private random claim token before retrieval and saves the code/token in its tab's session storage. The first atomic database claim reserves the transfer until its original expiry; another receiver cannot retrieve it. Retrying with the same claim token returns the same backup. Canceling the review releases the reservation; closing the tab does not, so a lost tab may leave the code reserved until expiry. Reloading that tab offers **Resume transfer**. Session storage contains only transfer credentials, never the backup payload. Releasing a reservation cannot make a recipient forget data it has already downloaded; one-time retrieval is not copy protection.
-
-Successful local import records a receipt in the **same atomic localStorage write** as the profile. The last 256 receipts are retained separately from profile content and are not exported. They prevent a retry from creating a second keep-both identity if an acknowledgment is lost. The recipient acknowledges completion only after local saving succeeds. Completion immediately erases the encrypted personal payload; a small token-protected tombstone remains until expiry so acknowledgments can be retried. A failed completion request offers **Finish transfer** and never repeats the local import. Sender cancellation uses a separate owner token and removes the transfer. No distributed transaction spans a browser and Supabase; deleting browser storage also removes its receipts and resume credentials.
-
-### Server and database setup
-
-1. Copy `.env.example` to `.env.local` in the repository root and configure `SUPABASE_URL`, a server-only `SUPABASE_SECRET_KEY`, and a 32-byte random `TRANSFER_CODE_SECRET` encoded as 64 hex characters. Keep `.env.local` private; it is ignored by Git. Never put these secrets in a `NEXT_PUBLIC_` variable or a client component. All server instances intended to exchange codes must share the same transfer secret and Supabase project. Changing the secret invalidates outstanding transfers; use separate Supabase projects to isolate environments.
-2. Apply `supabase/migrations/20261118142050_profile_transfers.sql` to the intended Supabase project, using its SQL Editor for an initial bootstrap or your configured migration workflow. The migration creates only the `mabatid_transfers` and `mabatid_transfer_limits` tables and the named `mabatid_transfer_*` functions. Tables have RLS enabled with no browser policies. Explicit grants permit only `service_role`; functions are security invokers with an empty search path and no `PUBLIC`, `anon` or `authenticated` execute privileges. If bootstrapping through SQL Editor, reconcile the version with CLI migration history before a later CLI push (use that CLI version's `migration repair --help`). The SQL Editor does not automatically record a CLI migration history entry.
-3. Run `supabase/transfer-cleanup.sql` once on the hosted project to enable Supabase Cron and schedule the named minute-by-minute cleanup job. Running it again updates the same named job. Expiry prevents retrieval immediately even before cleanup runs. Cleanup removes expired transfers, completion tombstones and old rate buckets; it does not promise removal from provider backups or logs.
-4. Run `supabase/verify-transfers.sql`. Expected: schema version 1; two RLS-protected tables; no anon/authenticated table or claim-function access; zero security-definer relay functions; one active cleanup job. Check the project's Supabase security advisors as well. Two informational “RLS Enabled No Policy” suggestions are expected for these server-only tables; browser policies are deliberately absent. There should be no relay security errors or warnings.
-5. Add the same server variables to your deployment platform, then restart/redeploy the app. Code controls are shown only after `/api/transfers/status` confirms the database function is installed. An unavailable/misconfigured relay leaves file backup/restore usable and never generates a sample code.
-
-The Next.js Node server exposes `/api/transfers/{status,create,claim,finish,release,revoke}`. Mutations require JSON and a matching browser Origin/Host; arbitrary forwarded hosts are ignored. Requests and backups have bounded sizes and use the existing strict envelope parser. Codes and tokens are sent in POST bodies rather than URLs. Responses are uncached and errors do not disclose profile data, database details, or whether a code is expired/reserved/unknown.
-
-Atomic Postgres rate buckets enforce shared global limits across all app instances: 20 create attempts, 60 claims, 120 completions, and 60 releases/revocations per minute per action. Optional client limits (5 creates or 20 other actions/minute) use a pseudonymous HMAC of a **trusted** proxy IP header. Configure `TRANSFER_TRUSTED_IP_HEADER` only when your deployment platform overwrites that header; arbitrary client-supplied forwarding headers are not trusted by default. Without a trusted header, the global limits still apply. Global upload capacity is 128 unexpired transfers and 32 MiB of ciphertext, enforced under a short transaction lock. These conservative shared limits may temporarily limit unrelated visitors during abuse or heavy traffic; tune them with deployment-level abuse protection before broad rollout.
-
-### Verification
-
-`npm test` includes server validation, encrypted round trips, idempotent creation/completion, concurrent reservation behavior, cancellation, expiry, rate limits, request-origin checks, storage-failure safety and import receipts. When local PostgreSQL tools are available under a non-root user, it also starts a fresh temporary cluster and tests the **actual migration** against permissive Supabase-style default grants, real concurrent connections, row locks, RLS/privileges, capacity and cleanup. That SQL test reports a skip when those tools are unavailable; it does not contact a hosted project.
-
-For a live check against a deliberately configured Supabase project, start the production app on local port 3177 and run `npx tsx scripts/verify-transfer-relay.ts` (or set `TRANSFER_TEST_ORIGIN` to another local app origin). It uses a disposable synthetic profile, checks the stored ciphertext and payload erasure, and removes only its own test transfer in a `finally` block. It never prints keys or transfer credentials. Browser QA should use a fresh local origin and disposable profiles; verify a real generated code, recipient preview/cancel/resume, storage-failure retry, replacement/keep-both and reload recovery without touching existing browser profiles.
+A license has not yet been specified in this repository.

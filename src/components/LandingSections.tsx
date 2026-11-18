@@ -9,7 +9,6 @@ import {
   ListChecks,
   Mail,
   Map as MapIcon,
-  MessageSquareText,
   RotateCcw,
   Search,
   Smartphone,
@@ -20,11 +19,10 @@ import xavierPhoto from "../../IDPics/1x1.jpg";
 import kristianPhoto from "../../IDPics/photo_2026-11-18_18-45-07.jpg";
 import {
   fetchLikes,
-  nextWeekStart,
   sendLike,
-  setLikedThisWeek,
-  useLikedThisWeek,
+  type LikeTally,
 } from "@/lib/likes";
+import { FeedbackForm } from "./FeedbackForm";
 import { GithubMark, githubHandle, TeamIdCard, type TeamMember } from "./TeamIdCard";
 
 const d = (ms: number) => ({ "--d": `${ms}ms` }) as CSSProperties;
@@ -177,48 +175,57 @@ function UnderTheHood() {
 const BURST = [0, 45, 90, 135, 180, 225, 270, 315];
 
 export function RatesSection({ onAuth }: { onAuth: () => void }) {
-  const liked = useLikedThisWeek();
-  const [count, setCount] = useState<number | null>(null);
+  const [tally, setTally] = useState<LikeTally | null>(null);
+  const liked = tally?.liked ?? false;
+  const count = tally?.count ?? null;
   const [loading, setLoading] = useState(true);
   const [sending, setSending] = useState(false);
   const [error, setError] = useState<string | null>(null);
   /** Bumped on each successful like, to replay the pop + burst. */
   const [burst, setBurst] = useState(0);
+  const busy = useRef(false);
+  const revision = useRef(0);
 
   useEffect(() => {
     const ctrl = new AbortController();
-    fetchLikes(ctrl.signal)
-      .then((t) => setCount(t.count))
-      .catch(() => {
-        if (!ctrl.signal.aborted) setCount(null);
-      })
-      .finally(() => {
-        if (!ctrl.signal.aborted) setLoading(false);
-      });
-    return () => ctrl.abort();
+    const refresh = () => {
+      if (busy.current) return;
+      const startedAt = revision.current;
+      fetchLikes(ctrl.signal)
+        .then((next) => { if (!ctrl.signal.aborted && !busy.current && revision.current === startedAt) setTally(next); })
+        .catch(() => { /* Keep the last known count; the initial failure shows a retry. */ })
+        .finally(() => { if (!ctrl.signal.aborted) setLoading(false); });
+    };
+    refresh();
+    window.addEventListener("focus", refresh);
+    const timer = window.setInterval(refresh, 60000);
+    return () => { ctrl.abort(); window.removeEventListener("focus", refresh); window.clearInterval(timer); };
   }, []);
 
   async function like() {
-    if (liked || sending) return;
+    if (liked || busy.current || loading) return;
+    busy.current = true;
+    revision.current += 1;
     setError(null);
     setSending(true);
     // Optimistic: the heart fills right away; reverted if the server refuses.
-    setLikedThisWeek(true);
+    const previous = tally;
+    if (previous) setTally({ ...previous, liked: true, count: previous.count + 1 });
     setBurst((b) => b + 1);
-    setCount((c) => (c === null ? c : c + 1));
     try {
-      const t = await sendLike();
-      setCount(t.count);
-    } catch {
-      setLikedThisWeek(false);
-      setCount((c) => (c === null ? c : Math.max(0, c - 1)));
-      setError("Couldn't send your like. Please try again.");
+      // Retry can also establish the browser cookie after an initial load failure.
+      if (!previous) await fetchLikes();
+      setTally(await sendLike());
+    } catch (error) {
+      setTally(previous);
+      setError(error instanceof Error ? error.message : "Couldn't send your like. Please try again.");
     } finally {
+      busy.current = false;
       setSending(false);
     }
   }
 
-  const again = nextWeekStart().toLocaleDateString("en-PH", { weekday: "long", month: "short", day: "numeric" });
+  const again = tally ? new Date(tally.nextResetAt).toLocaleDateString("en-PH", { timeZone: "Asia/Manila", weekday: "long", month: "short", day: "numeric" }) : "Monday";
 
   return (
     <section aria-labelledby="rates-title" className="flex flex-col gap-8">
@@ -239,7 +246,7 @@ export function RatesSection({ onAuth }: { onAuth: () => void }) {
           <button
             type="button"
             onClick={like}
-            disabled={sending}
+            disabled={loading || sending || liked}
             aria-pressed={liked}
             aria-disabled={liked || undefined}
             aria-label="Like MabatID"
@@ -279,26 +286,12 @@ export function RatesSection({ onAuth }: { onAuth: () => void }) {
         <p aria-live="polite" className={`min-h-5 text-sm ${error ? "font-semibold text-destructive" : "text-muted-foreground"}`}>
           {error ?? (liked ? `Thanks! You can like again on ${again}.` : "Tap the heart to send a like.")}
         </p>
+        <p className="-mt-3 text-xs text-muted-foreground">One like per browser each week. Resets Monday, 12:00 AM Philippine time.</p>
       </div>
 
-      <aside
-        style={d(180)}
-        aria-label="Written feedback"
-        className="rise mx-auto flex w-full max-w-md flex-col items-center gap-3 rounded-3xl bg-mist/35 px-5 py-4 text-center ring-1 ring-sky/25 sm:flex-row sm:text-left"
-      >
-        <span aria-hidden="true" className="grid size-10 shrink-0 place-items-center rounded-2xl bg-white text-civic">
-          <MessageSquareText className="size-5" />
-        </span>
-        <p className="flex-1 text-sm leading-snug text-navy">
-          <span className="font-semibold">Want to write a comment?</span>{" "}
-          <span className="text-muted-foreground">
-            Written feedback is only for registered devices. Open a device profile first.
-          </span>
-        </p>
-        <Button type="button" onClick={onAuth} variant="outline" size="md" className="btn-lift shrink-0">
-          Open device profile
-        </Button>
-      </aside>
+      <div style={d(180)} className="rise mx-auto w-full max-w-md">
+        <FeedbackForm onOpenProfile={onAuth} />
+      </div>
     </section>
   );
 }

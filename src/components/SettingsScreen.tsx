@@ -10,6 +10,7 @@ import type { User } from "@/lib/store";
 import { CardIcon } from "./icons";
 import { ProfileTransfers } from "./TransferPanel";
 import { ProfileBackupRestore } from "./BackupRestorePanel";
+import { FeedbackForm } from "./FeedbackForm";
 
 const INVENTORY = [...CARDS, ...EXTRA_DOCUMENTS];
 
@@ -51,6 +52,7 @@ export function SettingsScreen({
       )}
       <ProfileBackupRestore />
       <ProfileTransfers />
+      <FeedbackForm onOpenProfile={onCreateProfile} />
     </div>
   );
 }
