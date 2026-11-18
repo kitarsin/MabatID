@@ -1,4 +1,6 @@
+import type { RevisionHistory } from "./revisions";
 import { CARDS } from "@/data/cards";
+import { DETAILS } from "@/data/details";
 import { EXTRA_DOCUMENTS } from "@/data/documents";
 import { FACTS, type ProfileFacts } from "@/data/facts";
 import { BUDGETS, SETUPS, type Budget, type Setup } from "./prefs";
@@ -7,6 +9,7 @@ import { normalizeEvidence, type DocumentEvidenceMap } from "./documents";
 
 /** Device profiles are not accounts or proof of identity. Never store credentials here. */
 export interface User {
+  revision?: RevisionHistory;
   id: string;
   name: string;
   age: number;
@@ -72,7 +75,8 @@ export function normalizeProfile(value: unknown, legacy = false): User | null {
         preparationKeys(card.id).has(key),
       );
     const mode = record(v.modes)[card.id];
-    if (mode === "onsite" || mode === "online") modes[card.id] = mode;
+    if ((mode === "onsite" || mode === "online") && DETAILS[card.id][mode])
+      modes[card.id] = mode;
   }
   return {
     id: v.id,

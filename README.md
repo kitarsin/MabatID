@@ -7,6 +7,8 @@ npm ci
 npm run dev
 ```
 
+Development and production builds use Turbopack (`next dev` / `next build`). The Next.js development indicator is enabled during development and is absent from production builds.
+
 Open the localhost URL printed by Next.js. Validation:
 
 ```sh
@@ -20,7 +22,7 @@ npm run build
 
 The app supports device profiles, document ownership, eligibility answers, acquisition planning, target tracking, requirements checklists and application progress. Any ID can be tracked before its prerequisites are ready. Ownership can be recorded independently of the acquisition procedure.
 
-Device profiles are **not authenticated accounts**. They use browser localStorage, are accessible to anyone using that browser, and do not sync. No passwords or email addresses are collected. Real server authentication and persistence are part of the backend integration.
+Device profiles are **not authenticated accounts**. They use browser localStorage, are accessible to anyone using that browser, and do not sync. No passwords or email addresses are collected. Manual JSON backup and restore moves saved profiles between devices without an account or storage service.
 
 On first load, v1 mock accounts migrate to credential-free profiles. Names, ages, documents and goals are retained. Password hashes and email addresses are removed from browser storage after the replacement is saved. Positional v1 checklist ticks are reset because their meaning changed; migrated profiles show a review notice.
 
@@ -67,7 +69,7 @@ Optional request fields are `documents` (date/format evidence only), `prep` (sta
 
 The client debounces changes and cancels stale requests. Users can compare alternatives, expand requirements and procedures, and open any prerequisite guide. **Start with …** applies the chosen application modes, tracks the final goal for a device profile, and opens the first guide. Requirement alternatives remain suggestions; they are not stored as a frozen plan. Recommendations are recalculated as documents and answers change. Starting a path never marks a document as owned or ticks a preparation task.
 
-Both endpoints are stateless and does not save profiles. It receives only the allowlisted planning fields, without names, ID numbers, document scans, email addresses, or credentials. Authentication, durable plans, and cross-device progress still need a server persistence layer.
+Both endpoints are stateless and do not save profiles. They receive only the allowlisted planning fields, without names, ID numbers, document scans, email addresses, or credentials. Manual JSON backups move saved progress between devices; these endpoints provide neither profile storage nor synchronization.
 
 ## ID and document filters
 
@@ -113,3 +115,88 @@ Source references are embedded in the card: [PSAHelpline delivery IDs](https://p
 The research catalog is provisional. References are included, but fees, eligibility, document acceptance, local variations, and all procedures still need an authoritative review and versioned source records. Passing software tests establishes consistent behavior, not government acceptance.
 
 Server authentication and a persistent database remain future backend work. Before exposing the planning endpoints publicly, add deployment-level rate limits and resource monitoring; its per-request search and body limits do not limit request volume.
+
+## Manual profile backup and restore
+
+Open **Settings → Backup & restore**, or **Open device profile → Bring your progress → Import a file** before creating a profile. Select any saved profile and download its JSON backup. On the other browser/device, select that file, review its identity/content and differences, and import it. Selecting or canceling a file changes no saved data. Files are read locally; no backup service, login, email, transfer-code service, or cloud storage is involved. Backups contain personal information, are **not encrypted**, and do **not continuously synchronize** devices. Keep files private. Code-based device transfer is a separate, explicitly online option described below. Clearing browser storage still deletes local profiles and local undo data; keep a separate file backup.
+
+### Format and validation
+
+Format version 1 is an object with `format: "mabatid-profile-backup"`, `version: 1`, informational ISO `exportedAt`, `profile`, `contentHash`, and optional `revision`. The profile holds the permanent `id`, nickname (`name`), applicant age, creation/setup/review metadata, owned document IDs, document issue/expiry dates and format confirmations, eligibility answers (`facts`), budget/application preferences, tracked goals/priority, stable checklist keys (`prep`), and chosen application routes (`modes`). Computed recommendations are excluded and recalculated from these inputs and the current catalog. The active selection, unrelated profiles and replacement undo snapshot are not exported.
+
+The content fingerprint is SHA-256 of UTF-8 canonical JSON from `profileContent` in `src/lib/revisions.ts`: sorted object keys, sorted/deduplicated set arrays, explicit defaults, and omitted empty map entries. Whitespace, JSON key order, list order, and export time do not change content identity. Each revision has `nonce` (random UUID), `parents` (zero to two revision IDs), `contentHash`, and `id`. Its ID is SHA-256 of canonical `{ profileId, nonce, parents, contentHash }`. This binds ancestry to content and permanent identity. Fingerprints detect damage and inconsistent metadata; they are not signatures or proof of authenticity. Someone who controls a file can deliberately recompute them.
+
+Files are limited to **1 MiB**, depth 12, 20,000 visited values, 256 object entries, 512 array entries, 2,048-character strings (individual fields have tighter limits), and 64 revision nodes. Invalid JSON, unsafe property names, wrong field types, invalid document dates, unsupported format versions, and content-fingerprint mismatches are rejected before saving. Missing/invalid/content-mismatched revision metadata is explicitly reported as unreliable and requires acknowledgment; it cannot establish freshness. Obsolete/unrecognized catalog IDs, checklist keys, evidence fields, answers and preferences are listed for review. Importing a sanitized profile requires acknowledgment and records a new revision when its prior history no longer matches its content. Invalid raw files cannot silently reset existing profiles.
+
+### Comparison, replacement and undo
+
+Profiles match by permanent ID, never nickname. Renaming preserves identity; **Keep both** assigns a new permanent ID and independent root revision. The shared engine compares validated revision ancestry:
+
+| Evidence | Result |
+| --- | --- |
+| Same saved content | Already up to date |
+| Incoming history contains current revision | Imported version is newer |
+| Current history contains incoming revision | Backup is older |
+| Complete histories diverge after a shared revision | Conflict |
+| Missing, invalid, unrelated, or insufficient/pruned ancestry | Cannot reliably determine freshness |
+
+Neither device clocks, file dates, export dates, document counts, checklist totals, nor incrementing counters decide freshness. A newly exported file can contain older progress, and a newer revision can remove IDs or uncheck tasks. Meaningful normalized edits create revisions; no-op updates, selection changes and exports do not. History is bounded to the 64 nearest reachable nodes, retaining both parents of a resolution before older ancestors. Pruning may make comparison uncertain; direct proven ancestry still works across a pruned boundary when the relevant nodes remain. No automatic content merging occurs.
+
+Preview shows additions/removals, nickname/age/metadata, changed answers/preferences, document evidence, routes, goals and checklist changes. Every replacement requires an explicit checkbox confirmation, even if newer. Older/conflicting/unknown versions can be chosen deliberately. Newer versions preserve their incoming revision; explicit rollback or conflict/unknown resolution creates a new revision descending from the current head and, when valid, the incoming head. Cancel leaves storage untouched. Commit rechecks the target, including its revision metadata; if it changed or appeared/disappeared after preview, review again. Unrelated profiles are retained.
+
+One previous replacement snapshot is stored locally with the profiles and survives reload. **Undo last replacement** restores only that profile's content as a new revision. It is disabled after any later meaningful edit to that profile (even if an edit later restores identical content). Changing another profile or the active selection does not invalidate undo. Another replacement replaces the single undo snapshot. File backups do not include undo snapshots.
+
+### Persistence and integration
+
+Profiles, active selection, revision ancestry and the one undo snapshot are saved atomically in `mabatid.profiles.v3`. Existing v2 profiles are migrated with identities, ownership/evidence, stable progress, preferences and active selection intact; the original v2 keys are retained as migration recovery data and are not updated afterward. Legacy v1 mock profiles keep valid stable keys, discard obsolete positional ticks and receive a review notice; legacy credential records are removed only after the new record saves. Failed/corrupt migrations leave their sources untouched. Clearing only v3 manually can therefore expose the older v2 recovery data on the next migration.
+
+Writes require **Web Locks** and Web Crypto in a secure context (HTTPS or localhost). Cooperating tabs serialize the complete read/check/write transaction under `mabatid-profile-storage`, use current durable data, reject stale target edits (including full-form edits checked against the version that initialized the form), and refresh on storage/focus events. An additional raw-storage check rejects changes during asynchronous work. Storage denial/quota errors leave the saved record intact and the app publishes no successful candidate state. External tools and older app versions are not supported concurrent writers; they may ignore locks or discard newer record fields; avoid running old and new app versions against the same browser storage. The localStorage record is atomic, but browser storage is not a durable server database.
+
+`src/lib/backup.ts` handles the transport-independent envelope/validation/differences; `revisions.ts` handles content identity and ancestry; `profile-repository.ts` owns migration, preview, transactional commits and undo. A future transfer-code service should return this same JSON envelope and call the same preview/commit flow. It must never write profiles directly. The transfer-code interface uses this same envelope and review component through the temporary relay described below.
+
+Settings renders the reusable adapter below. Other client screens can use the same integration:
+
+```tsx
+// Inside an existing client Settings component, under StoreProvider:
+import { ProfileBackupRestore } from "@/components/BackupRestorePanel";
+
+// Render wherever Settings wants its backup section:
+<ProfileBackupRestore />
+```
+
+For another host or tests, render `<BackupRestorePanel controller={controller} onImported={onImported} />`. The `BackupRestoreController` type in `src/lib/store.tsx` specifies saved `users`, `activeId`, `undoSnapshot`, `downloadBackup(id)`, `previewBackup(json)`, `commitBackup(preview, choice, { confirmed, acknowledged })` and `undoReplacement(token)`. Reads produce no profile mutations; commits return `null` only after persistence succeeds, otherwise an error string. `onImported` runs only after successful persistence. Callbacks must be passed within a client boundary.
+
+The `npm test` suite includes complete round trips, removals/corrections, misleading export dates and reversed clocks, conflicts, missing/tampered/pruned history, renamed and separate identities, no-op saves, validation limits, catalog sanitization, migration and storage failure, concurrent/stale writes, targeted replacement, keep-both and undo after reload.
+
+
+## One-time device transfer codes
+
+Open **Settings → Move to another device**, or **Open device profile → Bring your progress → Use a code** to receive progress before creating a profile. Select any saved profile and choose **Make a code**, then enter the grouped 12-character code on another device and choose **Review transfer**. The recipient does not need a profile first. The same `ImportReview` component and repository preview/commit engine handle files and codes: identity checks, ancestry comparisons, detailed differences, sanitization acknowledgment, replace/keep-both decisions, explicit replacement confirmation, stale-target checks and persistent undo. **Keep current profile** finishes a transfer whose content is already identical, without creating a revision.
+
+Settings hosts `<ProfileBackupRestore />` and `<ProfileTransfers />` as separate sections; another client screen can render `<TransferPanel controller={controller} />` using the same store controller.
+
+Creating a code snapshots the selected durable profile; later edits require a new code. Codes expire after ten minutes according to database time. Browser countdowns are informational and use elapsed monotonic time; neither their clock nor transfer expiry determines profile freshness. Codes are cryptographically random (unbiased selection from the readable alphabet) and grouped as `XXXX-XXXX-XXXX`. No accounts, passwords, emails or automatic synchronization are introduced. `@supabase/supabase-js` is used only by the server; `@supabase/ssr` is installed as requested but is not needed for this account-free relay.
+
+Unlike file import, generating a code temporarily uploads the backup through MabatID's server to Supabase. The server encrypts it with AES-256-GCM before storing it. Encryption and code/owner/claim HMAC fingerprints use separate derivation domains from the server's transfer secret. The authenticated encrypted bundle includes its transfer ID and readable code, both verified against the lookup context; swapped database ciphertext is rejected before returning any backup. Idempotent creation also requires the exact original snapshot. The database stores ciphertext and fingerprints, not readable codes or browser claim credentials. **This is not end-to-end encryption: the MabatID server can decrypt the payload.** Anyone holding the code can attempt to retrieve it. The UI explains this upload before code creation. Backups downloaded as files remain unencrypted.
+
+A receiving browser generates a private random claim token before retrieval and saves the code/token in its tab's session storage. The first atomic database claim reserves the transfer until its original expiry; another receiver cannot retrieve it. Retrying with the same claim token returns the same backup. Canceling the review releases the reservation; closing the tab does not, so a lost tab may leave the code reserved until expiry. Reloading that tab offers **Resume transfer**. Session storage contains only transfer credentials, never the backup payload. Releasing a reservation cannot make a recipient forget data it has already downloaded; one-time retrieval is not copy protection.
+
+Successful local import records a receipt in the **same atomic localStorage write** as the profile. The last 256 receipts are retained separately from profile content and are not exported. They prevent a retry from creating a second keep-both identity if an acknowledgment is lost. The recipient acknowledges completion only after local saving succeeds. Completion immediately erases the encrypted personal payload; a small token-protected tombstone remains until expiry so acknowledgments can be retried. A failed completion request offers **Finish transfer** and never repeats the local import. Sender cancellation uses a separate owner token and removes the transfer. No distributed transaction spans a browser and Supabase; deleting browser storage also removes its receipts and resume credentials.
+
+### Server and database setup
+
+1. Copy `.env.example` to `.env.local` in the repository root and configure `SUPABASE_URL`, a server-only `SUPABASE_SECRET_KEY`, and a 32-byte random `TRANSFER_CODE_SECRET` encoded as 64 hex characters. Keep `.env.local` private; it is ignored by Git. Never put these secrets in a `NEXT_PUBLIC_` variable or a client component. All server instances intended to exchange codes must share the same transfer secret and Supabase project. Changing the secret invalidates outstanding transfers; use separate Supabase projects to isolate environments.
+2. Apply `supabase/migrations/20261118142050_profile_transfers.sql` to the intended Supabase project, using its SQL Editor for an initial bootstrap or your configured migration workflow. The migration creates only the `mabatid_transfers` and `mabatid_transfer_limits` tables and the named `mabatid_transfer_*` functions. Tables have RLS enabled with no browser policies. Explicit grants permit only `service_role`; functions are security invokers with an empty search path and no `PUBLIC`, `anon` or `authenticated` execute privileges. If bootstrapping through SQL Editor, reconcile the version with CLI migration history before a later CLI push (use that CLI version's `migration repair --help`). The SQL Editor does not automatically record a CLI migration history entry.
+3. Run `supabase/transfer-cleanup.sql` once on the hosted project to enable Supabase Cron and schedule the named minute-by-minute cleanup job. Running it again updates the same named job. Expiry prevents retrieval immediately even before cleanup runs. Cleanup removes expired transfers, completion tombstones and old rate buckets; it does not promise removal from provider backups or logs.
+4. Run `supabase/verify-transfers.sql`. Expected: schema version 1; two RLS-protected tables; no anon/authenticated table or claim-function access; zero security-definer relay functions; one active cleanup job. Check the project's Supabase security advisors as well. Two informational “RLS Enabled No Policy” suggestions are expected for these server-only tables; browser policies are deliberately absent. There should be no relay security errors or warnings.
+5. Add the same server variables to your deployment platform, then restart/redeploy the app. Code controls are shown only after `/api/transfers/status` confirms the database function is installed. An unavailable/misconfigured relay leaves file backup/restore usable and never generates a sample code.
+
+The Next.js Node server exposes `/api/transfers/{status,create,claim,finish,release,revoke}`. Mutations require JSON and a matching browser Origin/Host; arbitrary forwarded hosts are ignored. Requests and backups have bounded sizes and use the existing strict envelope parser. Codes and tokens are sent in POST bodies rather than URLs. Responses are uncached and errors do not disclose profile data, database details, or whether a code is expired/reserved/unknown.
+
+Atomic Postgres rate buckets enforce shared global limits across all app instances: 20 create attempts, 60 claims, 120 completions, and 60 releases/revocations per minute per action. Optional client limits (5 creates or 20 other actions/minute) use a pseudonymous HMAC of a **trusted** proxy IP header. Configure `TRANSFER_TRUSTED_IP_HEADER` only when your deployment platform overwrites that header; arbitrary client-supplied forwarding headers are not trusted by default. Without a trusted header, the global limits still apply. Global upload capacity is 128 unexpired transfers and 32 MiB of ciphertext, enforced under a short transaction lock. These conservative shared limits may temporarily limit unrelated visitors during abuse or heavy traffic; tune them with deployment-level abuse protection before broad rollout.
+
+### Verification
+
+`npm test` includes server validation, encrypted round trips, idempotent creation/completion, concurrent reservation behavior, cancellation, expiry, rate limits, request-origin checks, storage-failure safety and import receipts. When local PostgreSQL tools are available under a non-root user, it also starts a fresh temporary cluster and tests the **actual migration** against permissive Supabase-style default grants, real concurrent connections, row locks, RLS/privileges, capacity and cleanup. That SQL test reports a skip when those tools are unavailable; it does not contact a hosted project.
+
+For a live check against a deliberately configured Supabase project, start the production app on local port 3177 and run `npx tsx scripts/verify-transfer-relay.ts` (or set `TRANSFER_TEST_ORIGIN` to another local app origin). It uses a disposable synthetic profile, checks the stored ciphertext and payload erasure, and removes only its own test transfer in a `finally` block. It never prints keys or transfer credentials. Browser QA should use a fresh local origin and disposable profiles; verify a real generated code, recipient preview/cancel/resume, storage-failure retry, replacement/keep-both and reload recovery without touching existing browser profiles.
