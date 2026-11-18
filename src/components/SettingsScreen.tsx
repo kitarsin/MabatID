@@ -52,7 +52,7 @@ export function SettingsScreen({
       )}
       <ProfileBackupRestore />
       <ProfileTransfers />
-      <FeedbackForm onOpenProfile={onCreateProfile} />
+      <FeedbackForm onOpenProfile={onCreateProfile} showLike />
     </div>
   );
 }

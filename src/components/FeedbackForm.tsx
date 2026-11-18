@@ -6,13 +6,15 @@ import { Button } from "./ui/button";
 import { useStore } from "@/lib/store";
 import { fetchLikes } from "@/lib/likes";
 import { FEEDBACK_MAX_LENGTH, FEEDBACK_MIN_LENGTH } from "@/lib/engagement/protocol";
+import { WeeklyLike } from "./WeeklyLike";
 
 /** The local-profile gate is a UX restriction, not server authentication. */
-export function FeedbackForm({ onOpenProfile }: { onOpenProfile: () => void }) {
+export function FeedbackForm({ onOpenProfile, showLike = false }: { onOpenProfile: () => void; showLike?: boolean }) {
   const { me } = useStore();
   // Reset drafts when switching local profiles so one visitor never submits another's draft.
-  return me?.onboarded ? <ProfileFeedback key={me.id} /> : (
+  return me?.onboarded ? <ProfileFeedback key={me.id} showLike={showLike} /> : (
     <aside aria-label="Written feedback" className="rounded-3xl bg-mist/35 p-5 text-left ring-1 ring-sky/25">
+      {showLike && <div className="mb-5"><WeeklyLike compact /></div>}
       <MessageSquareText className="mb-3 size-5 text-civic" aria-hidden="true" />
       <p className="font-semibold text-navy">Want to share feedback?</p>
       <p className="mt-1 text-sm leading-relaxed text-muted-foreground">
@@ -23,7 +25,7 @@ export function FeedbackForm({ onOpenProfile }: { onOpenProfile: () => void }) {
   );
 }
 
-function ProfileFeedback() {
+function ProfileFeedback({ showLike }: { showLike: boolean }) {
   const id = useId();
   const [message, setMessage] = useState("");
   const [rating, setRating] = useState<number | null>(null);
@@ -74,6 +76,7 @@ function ProfileFeedback() {
         <h2 id={`${id}-heading`} className="text-lg font-semibold">Rating & feedback</h2>
       </div>
       <p className="text-sm leading-relaxed text-muted-foreground">Tell us what helped and what we can improve. Your feedback is private to the MabatID team.</p>
+      {showLike && <div className="mt-5"><WeeklyLike compact /></div>}
       {sent ? (
         <p role="status" className="mt-5 rounded-2xl bg-mist/40 p-4 text-sm font-semibold text-navy">Thanks! Your feedback has been sent to the team.</p>
       ) : (

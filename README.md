@@ -58,7 +58,7 @@ Under the hood, the planner works backward from a target through **AND / OR / at
 
 ## Feedback
 
-Anyone can leave a weekly like from the **Rates & Feedbacks** section. After completing profile setup, users can submit written feedback and an optional 1–5 star rating from **Settings**.
+Anyone can leave a weekly like from the **Rates & Feedbacks** section or **Settings**. After completing profile setup, users can submit written feedback and an optional 1–5 star rating from **Settings**.
 
 Feedback is private to the MabatID team. Please leave out ID numbers, document scans and other sensitive personal information.
 
