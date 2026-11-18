@@ -7,7 +7,7 @@ npm ci
 npm run dev
 ```
 
-Development and production builds use Webpack (`next dev --webpack` / `next build --webpack`). Tailwind CSS runs through PostCSS.
+Development and production builds use Turbopack (`next dev` / `next build`). The Next.js development indicator is enabled during development and is absent from production builds.
 
 Open the localhost URL printed by Next.js. Validation:
 
