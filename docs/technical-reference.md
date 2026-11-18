@@ -6,11 +6,13 @@ Implementation details for the catalog, planning engine, profile storage, backup
 
 ## Team development and deployment
 
+For the production target, see [Deploying on Vercel](vercel-deployment.md).
+
 ## Getting started
 
 ### Prerequisites
 
-- **Node.js 20.9 or newer** and npm.
+- **Node.js 26.x** and npm (matching the Vercel runtime).
 - A modern browser with Web Crypto and Web Locks support. Use localhost or HTTPS for saved-profile features.
 - Project environment variables; see [Environment configuration](#environment-configuration).
 
@@ -39,6 +41,7 @@ Keep secret keys private and out of version control. Restart the development ser
 
 | Command | Description |
 | --- | --- |
+| `npm run check` | Run strict lint, tests, environment validation and the production build. |
 | `npm run dev` | Start the development server. |
 | `npm test` | Run the automated test suite. |
 | `npm run lint` | Run ESLint. |
@@ -120,7 +123,7 @@ Optional request fields are `documents` (date/format evidence only), `prep` (sta
 
 The client debounces changes and cancels stale requests. Users can compare alternatives, expand requirements and procedures, and open any prerequisite guide. **Start with …** applies the chosen application modes, tracks the final goal for a device profile, and opens the first guide. Requirement alternatives remain suggestions; they are not stored as a frozen plan. Recommendations are recalculated as documents and answers change. Starting a path never marks a document as owned or ticks a preparation task.
 
-Both endpoints are stateless and do not save profiles. They receive only the allowlisted planning fields, without names, ID numbers, document scans, email addresses, or credentials. Manual JSON backups move saved progress between devices; these endpoints provide neither profile storage nor synchronization.
+Both endpoints do not save profiles. In production they update shared anonymous rate counters, independently of profile inputs. They receive only the allowlisted planning fields, without names, ID numbers, document scans, email addresses, or credentials. Manual JSON backups move saved progress between devices; these endpoints provide neither profile storage nor synchronization.
 
 ## ID and document filters
 
@@ -165,7 +168,7 @@ Source references are embedded in the card: [PSAHelpline delivery IDs](https://p
 
 The research catalog is provisional. References are included, but fees, eligibility, document acceptance, local variations, and all procedures still need an authoritative review and versioned source records. Passing software tests establishes consistent behavior, not government acceptance.
 
-Profiles intentionally remain local rather than authenticated cloud accounts. Supabase provides the temporary transfer relay, weekly likes and private feedback storage. Before exposing the planning endpoints publicly, add deployment-level rate limits and resource monitoring; their per-request search and body limits do not limit request volume.
+Profiles intentionally remain local rather than authenticated cloud accounts. Supabase provides the temporary transfer relay, weekly likes and private feedback storage. The planning endpoints enforce shared production request limits in addition to per-request search and body limits. Vercel setup, optional edge firewall rules, and live verification are covered in the [deployment guide](vercel-deployment.md).
 
 ## Manual profile backup and restore
 
@@ -244,7 +247,7 @@ Successful local import records a receipt in the **same atomic localStorage writ
 
 The Next.js Node server exposes `/api/transfers/{status,create,claim,finish,release,revoke}`. Mutations require JSON and a matching browser Origin/Host; arbitrary forwarded hosts are ignored. Requests and backups have bounded sizes and use the existing strict envelope parser. Codes and tokens are sent in POST bodies rather than URLs. Responses are uncached and errors do not disclose profile data, database details, or whether a code is expired/reserved/unknown.
 
-Atomic Postgres rate buckets enforce shared global limits across all app instances: 20 create attempts, 60 claims, 120 completions, and 60 releases/revocations per minute per action. Optional client limits (5 creates or 20 other actions/minute) use a pseudonymous HMAC of a **trusted** proxy IP header. Configure `TRANSFER_TRUSTED_IP_HEADER` only when your deployment platform overwrites that header; arbitrary client-supplied forwarding headers are not trusted by default. Without a trusted header, the global limits still apply. Global upload capacity is 128 unexpired transfers and 32 MiB of ciphertext, enforced under a short transaction lock. These conservative shared limits may temporarily limit unrelated visitors during abuse or heavy traffic; tune them with deployment-level abuse protection before broad rollout.
+Atomic Postgres rate buckets enforce shared global limits across all app instances: 20 create attempts, 60 claims, 120 completions, and 60 releases/revocations per minute per action. Optional client limits (5 creates or 20 other actions/minute) use a pseudonymous HMAC of a **trusted** proxy IP header. On Vercel the trusted `x-vercel-forwarded-for` header is selected automatically. Elsewhere, configure `TRANSFER_TRUSTED_IP_HEADER` only when your deployment platform overwrites that header; arbitrary client-supplied forwarding headers are not trusted by default. Without a trusted header, the global limits still apply. Global upload capacity is 128 unexpired transfers and 32 MiB of ciphertext, enforced under a short transaction lock. These conservative shared limits may temporarily limit unrelated visitors during abuse or heavy traffic; tune them with deployment-level abuse protection before broad rollout.
 
 ### Verification
 
@@ -264,7 +267,7 @@ Feedback is private to the team. There is no public feedback read endpoint. Revi
 
 1. Apply `supabase/migrations/20261118155250_weekly_likes_feedback.sql` to the intended Supabase project using your migration workflow or SQL Editor. SQL Editor bootstrapping does not record CLI migration history; reconcile it before a later CLI push. This migration is independent of the transfer tables.
 2. Reuse the server-only `SUPABASE_URL`, `SUPABASE_SECRET_KEY` and `TRANSFER_CODE_SECRET` already used for transfers. Alternatively set a separate 64-hex `ENGAGEMENT_SECRET`. All app instances must share the same signing secret; rotating it invalidates existing visitor cookies and resets browser deduplication. Never expose these secrets through `NEXT_PUBLIC_` variables.
-3. Optionally set `ENGAGEMENT_TRUSTED_IP_HEADER` only when the deployment proxy overwrites that header. Arbitrary forwarding headers are ignored by default. IP values are HMAC-hashed before use in rate buckets.
+3. Vercel automatically uses its trusted IP header. On other hosts, optionally set `ENGAGEMENT_TRUSTED_IP_HEADER` only when the deployment proxy overwrites that header. Arbitrary forwarding headers are ignored by default. IP values are HMAC-hashed before use in rate buckets.
 4. Run the Supabase security advisors. All three engagement tables have RLS enabled, browser privileges revoked and no browser policies. Functions use security invoker and an empty search path, with execute restricted to `service_role`. Informational “RLS Enabled No Policy” findings are intentional for these server-only tables.
 5. Redeploy/restart with the configured environment, then verify likes and feedback. Missing configuration or schema returns an unavailable error; the UI never invents counts or reports an unsaved message as sent.
 

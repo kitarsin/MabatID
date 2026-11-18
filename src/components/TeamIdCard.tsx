@@ -110,16 +110,6 @@ export function TeamIdCard({
     delete el.dataset.tilting;
   }
 
-  const frontAction = onOpen
-    ? {
-        label: `Enlarge ${name}'s ID card`,
-        run: () => tiltRef.current && onOpen(tiltRef.current),
-        cursor: "cursor-zoom-in",
-      }
-    : onFlip
-      ? { label: `Flip ${name}'s card to see contributions`, run: flipFromCard, cursor: "cursor-pointer" }
-      : null;
-
   return (
     <div
       className={zoomed ? "w-full" : "id-enter w-full max-w-[440px]"}
@@ -142,12 +132,19 @@ export function TeamIdCard({
               className="id-card @container absolute inset-0 overflow-hidden rounded-[18px] text-navy"
               inert={flipped}
             >
-              {frontAction && (
+              {(onOpen || onFlip) && (
                 <button
                   type="button"
-                  onClick={frontAction.run}
-                  aria-label={frontAction.label}
-                  className={`absolute inset-0 z-[1] rounded-[18px] focus-visible:outline-offset-[-4px] ${frontAction.cursor}`}
+                  onClick={() => {
+                    if (onOpen) {
+                      const card = tiltRef.current;
+                      if (card) onOpen(card);
+                    } else {
+                      flipFromCard();
+                    }
+                  }}
+                  aria-label={onOpen ? `Enlarge ${name}'s ID card` : `Flip ${name}'s card to see contributions`}
+                  className={`absolute inset-0 z-[1] rounded-[18px] focus-visible:outline-offset-[-4px] ${onOpen ? "cursor-zoom-in" : "cursor-pointer"}`}
                 />
               )}
               <div className="flex items-center justify-between gap-2 bg-civic px-[4.5%] py-[2.2%] text-white">

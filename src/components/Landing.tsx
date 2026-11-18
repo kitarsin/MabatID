@@ -1,12 +1,16 @@
 "use client";
 
 import { useLayoutEffect, useRef, useState, type CSSProperties } from "react";
+import Image, { type StaticImageData } from "next/image";
 import { ArrowRight, LogIn } from "lucide-react";
 import { AboutSection, RatesSection, TeamSection } from "./LandingSections";
 import { Button } from "@/components/ui/button";
 import { Pill, type PillTone } from "@/components/ui/pill";
 import { CARD_BY_ID, type IdCard } from "@/data/cards";
-import { RENDERS } from "@/data/renders";
+import psaRender from "../../public/renders/psa.webp";
+import barangayRender from "../../public/renders/barangay.webp";
+import philsysRender from "../../public/renders/philsys.webp";
+import postalRender from "../../public/renders/postal.webp";
 import { TREE_STATUS_LABELS } from "@/lib/tree-status";
 import { Logo } from "./Logo";
 import { NodeCircle, type NodeVisualStatus } from "./NodeCircle";
@@ -248,6 +252,12 @@ function Backdrop() {
  * card (FLOATERS).
  */
 const HERO_END = "postal";
+const HERO_RENDERS: Record<string, StaticImageData> = {
+  psa: psaRender,
+  barangay: barangayRender,
+  philsys: philsysRender,
+  postal: postalRender,
+};
 
 function heroChain(): IdCard[] {
   const chain: IdCard[] = [];
@@ -294,18 +304,19 @@ function HeroCard() {
   return (
     <div aria-hidden="true" className="relative mx-auto w-full max-w-xl hero:order-2 hero:mx-0 hero:w-auto hero:justify-self-center">
       {FLOATERS.map(([id, pos, rot, dur, delay], i) =>
-        RENDERS[id] ? (
+        HERO_RENDERS[id] ? (
           <div
             key={id}
             style={d(420 + i * 90)}
             className={`rise pointer-events-none absolute z-0 hidden hero:block ${pos} [--rise-y:14px]`}
           >
-            <img
-              src={RENDERS[id].front}
+            <Image
+              src={HERO_RENDERS[id]}
+              sizes="(min-width: 1280px) 144px, 112px"
               alt=""
               draggable={false}
               decoding="async"
-              className="float-card render-img w-full select-none"
+              className="float-card render-img h-auto w-full select-none"
               style={
                 {
                   "--rot": `${rot}deg`,
@@ -322,14 +333,15 @@ function HeroCard() {
           behind the card. Columns mirror the card's row (px-4 + w-20 nodes at both ends and the centre). */}
       <div className="relative z-0 -mb-5 flex items-end justify-between px-4 short:-mb-4 hero:hidden">
         {nodes.map(({ card }, i) =>
-          RENDERS[card.id] ? (
+          HERO_RENDERS[card.id] ? (
             <div
               key={card.id}
               style={d(380 + i * 90)}
               className="rise flex w-20 justify-center [--rise-y:12px]"
             >
-              <img
-                src={RENDERS[card.id].front}
+              <Image
+                src={HERO_RENDERS[card.id]}
+                sizes="104px"
                 alt=""
                 draggable={false}
                 decoding="async"

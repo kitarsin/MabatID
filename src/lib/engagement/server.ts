@@ -1,6 +1,7 @@
 import { createHmac, randomBytes, timingSafeEqual } from "node:crypto";
 import { createClient } from "@supabase/supabase-js";
 import { isTally, parseFeedback } from "./protocol";
+import { trustedIpHeader } from "../server/client-ip";
 
 export interface EngagementConfig { url: string; secretKey: string; signingSecret: string; trustedIpHeader?: string }
 export interface EngagementDatabase { rpc(name: string, args: Record<string, unknown>): Promise<unknown> }
@@ -13,7 +14,7 @@ export function engagementConfig(env: Readonly<Record<string, string | undefined
     const parsed = new URL(url);
     if (parsed.protocol !== "https:" && !(parsed.protocol === "http:" && ["localhost", "127.0.0.1"].includes(parsed.hostname))) return null;
   } catch { return null; }
-  return { url, secretKey, signingSecret, trustedIpHeader: env.ENGAGEMENT_TRUSTED_IP_HEADER?.toLowerCase() };
+  return { url, secretKey, signingSecret, trustedIpHeader: trustedIpHeader(env, env.ENGAGEMENT_TRUSTED_IP_HEADER) };
 }
 
 export function engagementDatabase(config: EngagementConfig): EngagementDatabase {

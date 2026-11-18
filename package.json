@@ -2,12 +2,17 @@
   "name": "mabatid",
   "version": "0.1.0",
   "private": true,
+  "engines": {
+    "node": "26.x"
+  },
   "scripts": {
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
     "lint": "eslint",
-    "test": "tsx --test tests/*.test.ts"
+    "test": "node scripts/run-tests.mjs",
+    "verify:production-env": "node scripts/check-production-env.mjs",
+    "check": "npm run lint -- --max-warnings=0 && npm test && npm run verify:production-env && npm run build"
   },
   "dependencies": {
     "@base-ui/react": "^1.9.0",

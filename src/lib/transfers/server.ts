@@ -2,6 +2,7 @@ import { createCipheriv, createDecipheriv, createHmac, randomBytes, randomInt } 
 import { createClient } from "@supabase/supabase-js";
 import { MAX_BACKUP_BYTES, parseBackup } from "../backup";
 import { CODE_LENGTH, TRANSFER_ALPHABET, validCode, validId, validToken } from "./protocol";
+import { trustedIpHeader } from "../server/client-ip";
 
 export interface RelayDatabase { rpc(name: string, args?: Record<string, unknown>): Promise<unknown> }
 export interface RelayConfig { url: string; secretKey: string; codeSecret: string; trustedIpHeader?: string }
@@ -10,7 +11,7 @@ export function relayConfig(env: Readonly<Record<string, string | undefined>> = 
   const { SUPABASE_URL: url, SUPABASE_SECRET_KEY: secretKey, TRANSFER_CODE_SECRET: codeSecret } = env;
   if (!url || !secretKey || !codeSecret || !/^[a-f0-9]{64}$/i.test(codeSecret)) return null;
   try { const parsed = new URL(url); if (parsed.protocol !== "https:" && !(parsed.protocol === "http:" && ["localhost", "127.0.0.1"].includes(parsed.hostname))) return null; } catch { return null; }
-  return { url, secretKey, codeSecret, trustedIpHeader: env.TRANSFER_TRUSTED_IP_HEADER?.toLowerCase() };
+  return { url, secretKey, codeSecret, trustedIpHeader: trustedIpHeader(env, env.TRANSFER_TRUSTED_IP_HEADER) };
 }
 export function supabaseDatabase(config: RelayConfig): RelayDatabase {
   // Never a browser/session client: user JWTs cannot replace this server role.
