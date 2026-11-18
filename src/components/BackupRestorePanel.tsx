@@ -81,7 +81,7 @@ export function BackupRestorePanel({ controller, onImported }: BackupRestorePane
       </div>}
       <div className="space-y-2">
         <label htmlFor={`${uid}-file`} className="block text-sm font-semibold">Select a backup file</label>
-        <input id={`${uid}-file`} type="file" accept=".json,application/json" disabled={busy} aria-describedby={`${uid}-limit`} className="block min-h-12 w-full min-w-0 max-w-full rounded-xl border border-border p-2 text-sm file:mr-2 file:max-w-full file:whitespace-normal" onChange={async (e) => {
+        <input id={`${uid}-file`} type="file" accept=".json,application/json" disabled={busy} aria-describedby={`${uid}-limit`} className="block min-h-12 w-full min-w-0 max-w-full cursor-pointer rounded-xl border border-civic/25 bg-mist/30 p-3 text-sm text-muted-foreground file:mr-3 file:min-h-11 file:max-w-full file:cursor-pointer file:rounded-full file:border-0 file:bg-civic file:px-4 file:py-2 file:text-sm file:font-semibold file:whitespace-normal file:text-white hover:file:bg-navy disabled:cursor-not-allowed disabled:opacity-50" onChange={async (e) => {
           const file = e.target.files?.[0]; e.target.value = "";
           if (!file) return;
           setPreview(null); setStatus(null); setError(null);
