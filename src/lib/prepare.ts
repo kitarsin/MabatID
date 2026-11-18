@@ -28,8 +28,6 @@ export interface PrepRow {
   source: "owned" | "profile" | "step" | null;
   blocked?: boolean;
   note?: string;
-  /** Case-by-case requirement label, e.g. "If your barangay asks". */
-  onlyIf?: string;
 }
 export interface PrepRoute {
   id: string;
@@ -122,15 +120,14 @@ export function evaluatePrepare(
         (condition === true && !blocked && (auto || manual.has(item.id))),
       auto,
       opt: !!item.opt,
-      onlyIf: item.onlyIf,
       unknown: !obtained && condition === undefined,
       blocked: !obtained && !!blocked,
       note: blocked
         ? !owned?.has("barangay-id")
-          ? "Select your Barangay ID under Settings → Your collection and record its dates and required card details."
+          ? "Select your Barangay ID under Progress → Edit and record its dates and required card details."
           : validity.status !== "valid"
             ? validity.reason
-            : "Confirm the required details on your Barangay ID under Settings → Your collection."
+            : "Confirm the required details on your Barangay ID under Progress → Edit."
         : undefined,
       source: obtained
         ? "owned"
@@ -314,26 +311,6 @@ export function trackProgress(
     pct: Math.min(99, Math.round((done / total) * 100)),
     stage,
   };
-}
-
-/**
- * Saved data can outlive the catalog (e.g. a route removed from an ID). Keep only application routes the ID
- * still offers and checklist ticks that still exist, so old profiles never break the planner.
- */
-export function sanitizeSaved(
-  modes: Record<string, Mode> = {},
-  prep: Record<string, string[]> = {},
-): { modes: Record<string, Mode>; prep: Record<string, string[]> } {
-  const cleanModes: Record<string, Mode> = {};
-  for (const [id, mode] of Object.entries(modes))
-    if (DETAILS[id]?.[mode]) cleanModes[id] = mode;
-  const cleanPrep: Record<string, string[]> = {};
-  for (const [id, keys] of Object.entries(prep)) {
-    if (!DETAILS[id]) continue;
-    const valid = preparationKeys(id);
-    cleanPrep[id] = keys.filter((k) => valid.has(k));
-  }
-  return { modes: cleanModes, prep: cleanPrep };
 }
 
 export function preparationKeys(cardId: string): Set<string> {

@@ -59,26 +59,6 @@ export function conditionFacts(
   return [];
 }
 
-/**
- * The yes/no question behind a condition: which fact to ask and which answer makes the condition true.
- * Age parts are skipped (age is asked separately). Undefined when no fact is involved.
- */
-export function conditionQuestion(
-  condition: Condition,
-): { fact: FactId; applies: boolean } | undefined {
-  if ("fact" in condition) return { fact: condition.fact, applies: true };
-  if ("not" in condition) {
-    const inner = conditionQuestion(condition.not);
-    return inner && { fact: inner.fact, applies: !inner.applies };
-  }
-  if ("all" in condition)
-    for (const part of condition.all) {
-      const q = conditionQuestion(part);
-      if (q) return q;
-    }
-  return undefined;
-}
-
 export function conditionValue(
   condition: Condition,
   facts: ProfileFacts,

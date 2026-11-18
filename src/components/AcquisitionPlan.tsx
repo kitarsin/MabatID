@@ -1,9 +1,6 @@
 "use client";
 
-import { ArrowRight, Check, Info, LoaderCircle, Route } from "lucide-react";
-import { Button } from "@/components/ui/button";
-import { Chip } from "@/components/ui/chip";
-import { Disclosure } from "@/components/ui/disclosure";
+import { ArrowRight, Check, LoaderCircle, Route } from "lucide-react";
 import { FACTS, type FactId, type ProfileFacts } from "@/data/facts";
 import type { AcquisitionPlan as GeneratedPlan } from "@/lib/planner/types";
 import type { PlanningView } from "@/lib/use-tree-planning";
@@ -17,16 +14,7 @@ export function AcquisitionPlan({
   onSetFact,
   onFollow,
   view,
-  showHeading = true,
-  starter,
 }: {
-  /**
-   * Set for Foundational and Starter & supporting items. When their route is just the item itself, a note
-   * explains that the plan is the same as applying directly.
-   */
-  starter?: { id: string; noun: string };
-  /** False when a parent control already titles this section. */
-  showHeading?: boolean;
   facts: ProfileFacts;
   signedIn: boolean;
   onOpen: (id: string) => void;
@@ -43,19 +31,16 @@ export function AcquisitionPlan({
   return (
     <section
       aria-label="Your acquisition plan"
-      className="space-y-5 rounded-[24px] bg-mist/35 p-5 ring-1 ring-sky/25"
+      className="space-y-3 rounded-2xl border-2 border-civic bg-mist/40 p-4"
     >
-      {showHeading && (
-        <div>
-          <h3 className="flex items-center gap-2 text-lg font-semibold tracking-tight text-navy">
-            <Route className="size-5 text-civic" aria-hidden="true" />
-            How to get it
-          </h3>
-          <p className="mt-1.5 text-[15px] leading-relaxed text-muted-foreground">
-            The quickest route from what you already have.
-          </p>
-        </div>
-      )}
+      <h3 className="flex items-center gap-2 font-extrabold">
+        <Route className="size-5" aria-hidden="true" />
+        Your acquisition plan
+      </h3>
+      <p className="text-sm text-muted-foreground">
+        A path based on your selected documents and answers. It updates when
+        your starting point changes.
+      </p>
       <div
         role="group"
         aria-label="Plan preference"
@@ -64,22 +49,24 @@ export function AcquisitionPlan({
         {(
           [
             { id: "fewest-documents", label: "Fewer documents" },
-            { id: "lowest-fees", label: "Lower fees" },
+            { id: "lowest-fees", label: "Lower estimated fees" },
           ] as const
         ).map((option) => (
-          <Chip
+          <button
             key={option.id}
-            pressed={objective === option.id}
+            type="button"
+            aria-pressed={objective === option.id}
             onClick={() => onObjectiveChange(option.id)}
+            className={`rounded-full border-2 px-3 py-2 text-xs font-bold ${objective === option.id ? "border-civic bg-civic text-white" : "border-border bg-card"}`}
           >
             {option.label}
-          </Chip>
+          </button>
         ))}
       </div>
       {view.loading && (
         <p role="status" className="flex items-center gap-2 text-sm">
           <LoaderCircle className="size-4 animate-spin" aria-hidden="true" />
-          Finding a route…
+          Finding your path…
         </p>
       )}
       {view.error && (
@@ -87,7 +74,7 @@ export function AcquisitionPlan({
           <p>{view.error}</p>
           <button
             type="button"
-            className="inline-flex min-h-11 items-center font-semibold text-civic underline"
+            className="font-bold text-civic underline"
             onClick={view.onRetry}
           >
             Try again
@@ -96,44 +83,26 @@ export function AcquisitionPlan({
       )}
       {result?.status === "owned" && (
         <p role="status" className="text-sm font-semibold">
-          You already have this. Keep it valid before using it elsewhere.
+          You already have this item. Keep any validity details up to date
+          before using it for another application.
         </p>
       )}
       {result && !plan && result.status !== "owned" && (
         <p role="status" className="text-sm">
           {result.status === "incomplete"
-            ? "We couldn’t finish finding a route. Add documents you have or answer the questions below, then try again."
-            : "No route found with what you have now. Check the questions below or ask the office about other options."}
+            ? "The search reached its limit before finding a complete path. Add your existing documents or answer eligibility questions, then try again."
+            : "No supported path was found with your current answers and documents. Review eligibility and existing documents, or confirm an alternative with the issuing office."}
         </p>
       )}
       {plan && (
         <>
-          {starter &&
-            plan.steps.length === 1 &&
-            plan.steps[0].id === starter.id && (
-              <p
-                role="note"
-                className="flex gap-3 rounded-2xl bg-white px-4 py-3 text-sm leading-relaxed text-navy ring-1 ring-sky/30"
-              >
-                <Info
-                  className="mt-0.5 size-4 shrink-0 text-civic"
-                  aria-hidden="true"
-                />
-                <span>
-                  <strong className="font-semibold">
-                    This is a starting {starter.noun}.
-                  </strong>{" "}
-                  Its route is the same as applying for it directly — just
-                  follow “What you need” and “How to apply” below.
-                </span>
-              </p>
-            )}
           {plan.questions.length > 0 && (
             <p
               role="status"
-              className="rounded-2xl bg-white px-4 py-3 text-sm leading-relaxed"
+              className="rounded-xl bg-white p-3 text-sm font-semibold"
             >
-              This route depends on a few answers. Check them below.
+              This is a conditional path. Confirm the questions and outside
+              documents below before relying on it.
             </p>
           )}
           {result!.plans.length > 1 && (
@@ -143,53 +112,50 @@ export function AcquisitionPlan({
               className="flex flex-wrap gap-2"
             >
               {result!.plans.map((p, i) => (
-                <Chip
+                <button
                   key={p.id}
-                  pressed={p.id === plan.id}
+                  type="button"
+                  aria-pressed={p.id === plan.id}
                   onClick={() => onSelectPlan(p.id)}
+                  className={`rounded-lg border-2 px-3 py-2 text-xs font-bold ${p.id === plan.id ? "border-civic bg-white" : "border-border"}`}
                 >
-                  Route {i + 1} · {p.steps.length} step
+                  Route {i + 1} · {p.steps.length} acquisition
                   {p.steps.length === 1 ? "" : "s"}
-                </Chip>
+                </button>
               ))}
             </div>
           )}
-          <p className="text-[15px] text-navy">
-            <strong className="font-semibold">
-              {plan.steps.length} step
+          <p className="text-sm">
+            <strong>
+              {plan.steps.length} acquisition
               {plan.steps.length === 1 ? "" : "s"}
             </strong>{" "}
-            <span className="text-muted-foreground">· about</span>{" "}
-            <strong className="font-semibold">
+            · Estimated modeled fees{" "}
+            <strong>
               ₱{plan.fees.min.toLocaleString()}
               {plan.fees.max !== plan.fees.min
                 ? `–₱${plan.fees.max.toLocaleString()}`
                 : ""}
             </strong>
           </p>
-          <ol className="space-y-2.5">
+          <ol className="space-y-3">
             {plan.steps.map((step, index) => (
               <li
                 key={step.id}
-                className="rounded-2xl bg-card px-4 py-1 ring-1 ring-navy/[0.07]"
+                className="space-y-2 rounded-xl bg-card p-3 ring-1 ring-border"
               >
                 <button
                   type="button"
                   onClick={() => onOpen(step.id)}
-                  className="flex min-h-12 w-full items-center justify-between gap-3 py-2 text-left"
+                  className="flex w-full items-start justify-between gap-2 text-left"
                 >
-                  <span className="flex items-center gap-3">
-                    <span className="grid size-7 shrink-0 place-items-center rounded-full bg-navy text-xs font-semibold text-white tabular-nums">
-                      {index + 1}
+                  <span>
+                    <span className="text-sm font-extrabold">
+                      {index + 1}. {step.name}
                     </span>
-                    <span>
-                      <span className="block text-[15px] font-semibold text-navy">
-                        {step.name}
-                      </span>
-                      <span className="mt-0.5 block text-xs text-muted-foreground">
-                        {step.routeLabel}
-                        {step.canStart ? " · You can start now" : ""}
-                      </span>
+                    <span className="mt-1 block text-xs text-muted-foreground">
+                      {step.routeLabel}
+                      {step.canStart ? " · Can start preparation" : ""}
                     </span>
                   </span>
                   <ArrowRight
@@ -198,8 +164,8 @@ export function AcquisitionPlan({
                   />
                 </button>
                 {step.prerequisites.length > 0 && (
-                  <p className="pb-2 pl-10 text-xs text-muted-foreground">
-                    Get first:{" "}
+                  <p className="text-xs text-muted-foreground">
+                    First obtain:{" "}
                     {step.prerequisites
                       .map(
                         (id) => plan.steps.find((s) => s.id === id)?.name ?? id,
@@ -209,18 +175,18 @@ export function AcquisitionPlan({
                   </p>
                 )}
                 {(step.preferenceMismatch || step.overBudget) && (
-                  <p className="pb-2 pl-10 text-xs font-semibold text-navy">
+                  <p className="text-xs font-semibold">
                     {step.preferenceMismatch &&
-                      "Different from how you prefer to apply. "}
-                    {step.overBudget && "May cost more than your budget."}
+                      "This route differs from your application preference. "}
+                    {step.overBudget &&
+                      "Its modeled fee range exceeds your per-item budget."}
                   </p>
                 )}
-                <Disclosure
-                  variant="inline"
-                  summary="What it needs"
-                  className="pb-2 pl-10"
-                >
-                  <ul className="mt-2 space-y-2 text-sm leading-relaxed">
+                <details>
+                  <summary className="cursor-pointer text-xs font-bold text-civic">
+                    Requirements and application steps
+                  </summary>
+                  <ul className="mt-2 space-y-2 text-sm">
                     {step.requirements
                       .filter((r) => r.kind !== "procedure")
                       .map((requirement) => (
@@ -236,15 +202,15 @@ export function AcquisitionPlan({
                           <span>
                             <Rich text={requirement.label} />
                             {requirement.state === "unknown" && (
-                              <small className="block text-xs font-semibold">
-                                Check this
+                              <small className="block font-semibold">
+                                Needs confirmation
                               </small>
                             )}
                           </span>
                         </li>
                       ))}
                   </ul>
-                  <ol className="mt-4 list-decimal space-y-2 pl-5 text-sm leading-relaxed">
+                  <ol className="mt-3 list-decimal space-y-2 pl-5 text-sm">
                     {step.procedure.map((s) => (
                       <li key={s.id}>
                         <span className="text-xs font-bold text-civic">
@@ -252,17 +218,7 @@ export function AcquisitionPlan({
                           ·{" "}
                         </span>
                         <Rich text={s.text} />
-                        {s.completed && (
-                          <>
-                            {" "}
-                            <Check
-                              className="inline size-3.5 text-civic"
-                              strokeWidth={3}
-                              aria-hidden="true"
-                            />
-                            <span className="sr-only"> (done)</span>
-                          </>
-                        )}
+                        {s.completed && " ✓"}
                         {s.link && (
                           <a
                             href={s.link.url}
@@ -283,21 +239,20 @@ export function AcquisitionPlan({
                   <button
                     type="button"
                     onClick={() => onOpen(step.id)}
-                    className="mt-1 inline-flex min-h-11 items-center text-xs font-semibold text-civic underline"
+                    className="mt-3 text-xs font-bold text-civic underline"
                   >
-                    Open its guide
+                    Open this guide to update its checklist
                   </button>
-                </Disclosure>
+                </details>
               </li>
             ))}
           </ol>
           {plan.questions.length > 0 && (
-            <Disclosure
-              summary="Answer to confirm this route"
-              hint={`${plan.questions.length} question${plan.questions.length === 1 ? "" : "s"}`}
-              className="bg-white"
-            >
-              <div className="mt-2 space-y-4">
+            <details>
+              <summary className="cursor-pointer text-sm font-bold">
+                Questions to confirm this path
+              </summary>
+              <div className="mt-3 space-y-3">
                 <FactQuestions
                   ids={factIds}
                   facts={facts}
@@ -305,7 +260,7 @@ export function AcquisitionPlan({
                 />
                 {plan.questions.some((q) => q.factId === "age") && (
                   <p className="text-sm">
-                    Set your age under “Can I apply?” below.
+                    Set the applicant age in the eligibility section below.
                   </p>
                 )}
                 <ul className="list-disc space-y-2 pl-5 text-sm">
@@ -316,39 +271,38 @@ export function AcquisitionPlan({
                   ))}
                 </ul>
               </div>
-            </Disclosure>
+            </details>
           )}
-          <Button
+          <button
             type="button"
-            variant="brand"
-            size="md"
             onClick={() => onFollow(plan)}
-            className="h-auto min-h-11 w-full whitespace-normal py-2"
+            className="min-h-11 w-full rounded-xl bg-civic px-3 py-2 text-sm font-bold text-white"
           >
             Start with {plan.steps[0]?.name}
-          </Button>
-          <p className="-mt-2 text-center text-xs text-muted-foreground">
-            Opens the first guide.
-            {signedIn ? " To track this goal, use the Track button below." : ""}
+          </button>
+          <p className="text-xs text-muted-foreground">
+            {signedIn
+              ? "Saves your application routes, tracks the final goal, and opens the first guide."
+              : "Opens the first guide with these application routes for this preview."}{" "}
+            The suggested path updates as you acquire documents.
+          </p>
+          <p className="text-xs text-muted-foreground">
+            {plan.explanation} Fees exclude unmodeled outside documents and
+            incidental costs. Planned acquisitions are not marked as owned.
           </p>
         </>
       )}
+      {result && !result.search.complete && (
+        <p role="status" className="text-xs text-muted-foreground">
+          The search was limited. This is the best path found in the explored
+          options; other routes may exist.
+        </p>
+      )}
       {result && (
-        <Disclosure variant="inline" summary="How this route was chosen">
-          <div className="space-y-2 text-xs leading-relaxed text-muted-foreground">
-            {plan && <p>{plan.explanation}</p>}
-            <p>
-              Fees are estimates and leave out extra costs. Steps in this route
-              aren’t marked as done until you tick them.
-            </p>
-            {!result.search.complete && (
-              <p>We checked the most likely options. Other routes may exist.</p>
-            )}
-            <p>
-              Based on our catalog as of {result.asOf}. Confirm with the office.
-            </p>
-          </div>
-        </Disclosure>
+        <p className="text-[11px] text-muted-foreground">
+          Based on the research catalog as of {result.asOf}. Confirm current
+          requirements and fees with the issuing office.
+        </p>
       )}
     </section>
   );

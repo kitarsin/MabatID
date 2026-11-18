@@ -7,7 +7,7 @@ export function Logo({ dark = false }: { dark?: boolean }) {
           <path d="M12 7v4M12 11l-6 6M12 11l6 6" />
         </svg>
       </span>
-      <span translate="no">Mabat<span className={dark ? "text-civic" : "text-amber"}>ID</span></span>
+      <span>Mabat<span className={dark ? "text-civic" : "text-amber"}>ID</span></span>
     </span>
   );
 }

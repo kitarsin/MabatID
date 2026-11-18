@@ -1,9 +1,7 @@
 "use client";
 
-import { useEffect, useId, useState } from "react";
+import { useState } from "react";
 import { BookOpen, ListFilter, X } from "lucide-react";
-import { Button } from "@/components/ui/button";
-import { Chip } from "@/components/ui/chip";
 import {
   CARDS,
   CATEGORY_META,
@@ -14,6 +12,7 @@ import {
 import { BUDGETS } from "@/lib/prefs";
 import { CardKindFilter } from "./CardKindFilter";
 import { GroupDefinitions } from "./GroupGuide";
+
 import {
   matchSet,
   activeFilterCount,
@@ -22,18 +21,6 @@ import {
   type FilterContext,
 } from "@/lib/filters";
 
-type PanelName = "filters" | "groups";
-
-const PANEL_BASE =
-  "absolute right-3 top-full z-30 mt-1 max-h-[min(70dvh,34rem)] w-[min(20rem,calc(100%-1.5rem))] origin-top-right overflow-y-auto overscroll-contain rounded-2xl bg-white p-4 shadow-xl ring-1 ring-border transition-[opacity,scale,visibility] ease-[var(--ease-out)]";
-const PANEL_OPEN = "visible scale-100 opacity-100 duration-[var(--dur-pop-in)]";
-const PANEL_CLOSED = "invisible scale-[0.98] opacity-0 duration-[var(--dur-pop-out)]";
-
-/**
- * Groups + Filter buttons and their panels. Rendered inside the tree toolbar: the buttons sit in the bar and
- * each panel drops down from the bar's bottom edge (the toolbar is the positioned ancestor).
- * Panels stay mounted so they can animate; Esc and outside click close them and focus returns to the button.
- */
 export function FilterBar({
   filters,
   onChange,
@@ -43,156 +30,176 @@ export function FilterBar({
   onChange: (f: Filters) => void;
   context: FilterContext;
 }) {
-  const [open, setOpen] = useState<PanelName | null>(null);
-  const uid = useId();
-  const id = (part: string, name: PanelName) => `${uid}-${name}-${part}`;
+  const [panel, setPanel] = useState<"filters" | "groups" | null>(null);
   const n = activeFilterCount(filters);
   const shown = matchSet(filters, context)?.size ?? CARDS.length;
 
-  useEffect(() => {
-    if (!open) return;
-    const triggerId = `${uid}-${open}-trigger`;
-    const panelId = `${uid}-${open}-panel`;
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key !== "Escape") return;
-      setOpen(null);
-      document.getElementById(triggerId)?.focus();
-    };
-    const onDown = (e: PointerEvent) => {
-      const t = e.target as Node;
-      // Clicking either trigger is handled by its own onClick (it toggles / switches panels).
-      const inside = [panelId, `${uid}-filters-trigger`, `${uid}-groups-trigger`].some((x) =>
-        document.getElementById(x)?.contains(t),
-      );
-      if (!inside) setOpen(null);
-    };
-    document.addEventListener("keydown", onKey);
-    document.addEventListener("pointerdown", onDown);
-    return () => {
-      document.removeEventListener("keydown", onKey);
-      document.removeEventListener("pointerdown", onDown);
-    };
-  }, [open, uid]);
-
-  const toggle = (name: PanelName) => setOpen((current) => (current === name ? null : name));
-
   return (
-    <>
-      <div className="flex shrink-0 items-center gap-1.5">
-        <Button
-          id={id("trigger", "groups")}
+    <div
+      className={`absolute right-3 top-3 flex w-[min(20rem,calc(100%-1.5rem))] flex-col items-end gap-2 ${panel ? "z-40" : "z-20"}`}
+    >
+      <div className="flex gap-2">
+        <button
           type="button"
-          variant="outline"
-          size="md"
-          onClick={() => toggle("groups")}
-          aria-expanded={open === "groups"}
-          aria-controls={id("panel", "groups")}
-          className="w-11 rounded-full px-0 text-civic sm:w-auto sm:px-3"
+          onClick={() =>
+            setPanel((current) => (current === "groups" ? null : "groups"))
+          }
+          aria-expanded={panel === "groups"}
+          className="inline-flex items-center gap-1.5 rounded-full bg-white px-3 py-2.5 text-sm font-bold text-civic shadow-md ring-1 ring-border"
         >
-          <BookOpen className="size-4" aria-hidden="true" />
-          <span className="sr-only sm:not-sr-only">Groups</span>
-        </Button>
-        <Button
-          id={id("trigger", "filters")}
+          <BookOpen className="size-4" aria-hidden="true" /> Groups
+        </button>
+        <button
           type="button"
-          variant="brand"
-          size="md"
-          onClick={() => toggle("filters")}
-          aria-expanded={open === "filters"}
-          aria-controls={id("panel", "filters")}
-          className="rounded-full px-3"
+          onClick={() =>
+            setPanel((current) => (current === "filters" ? null : "filters"))
+          }
+          aria-expanded={panel === "filters"}
+          className="inline-flex items-center gap-1.5 rounded-full bg-navy px-4 py-2.5 text-sm font-bold text-white shadow-md hover:bg-civic"
         >
           <ListFilter className="size-4" aria-hidden="true" />
           Filter
           {n > 0 && (
-            <span className="grid size-5 place-items-center rounded-full bg-amber text-xs font-bold tabular-nums text-navy">
+            <span className="grid size-5 place-items-center rounded-full bg-amber text-xs font-extrabold text-navy">
               {n}
             </span>
           )}
-        </Button>
+        </button>
       </div>
 
-      <section
-        id={id("panel", "groups")}
-        aria-label="Credential group definitions"
-        className={`${PANEL_BASE} ${open === "groups" ? PANEL_OPEN : PANEL_CLOSED}`}
-      >
-        <h2 className="mb-3 text-base font-bold">What do the groups mean?</h2>
-        <GroupDefinitions />
-      </section>
+      {panel === "groups" && (
+        <section
+          aria-label="Credential group definitions"
+          className="max-h-[calc(100dvh-10rem)] w-full overflow-y-auto rounded-2xl bg-white p-4 shadow-xl ring-1 ring-border"
+        >
+          <h2 className="mb-3 text-base font-extrabold">
+            What do the groups mean?
+          </h2>
+          <GroupDefinitions />
+        </section>
+      )}
+      {panel === "filters" && (
+        <div className="max-h-[calc(100dvh-10rem)] w-full space-y-4 overflow-y-auto rounded-2xl bg-white p-4 shadow-xl ring-1 ring-border">
+          <CardKindFilter
+            value={filters.kind}
+            onChange={(kind) => onChange({ ...filters, kind })}
+          />
+          <Group label="Credential group (pick one or more)">
+            {CREDENTIAL_GROUPS.map((t) => (
+              <Chip
+                key={t}
+                on={filters.groups.includes(t)}
+                onClick={() =>
+                  onChange({
+                    ...filters,
+                    groups: filters.groups.includes(t)
+                      ? filters.groups.filter((x) => x !== t)
+                      : [...filters.groups, t].sort(),
+                  })
+                }
+              >
+                {GROUP_META[t].label}
+              </Chip>
+            ))}
+          </Group>
 
-      <section
-        id={id("panel", "filters")}
-        aria-label="Filters"
-        className={`${PANEL_BASE} space-y-4 ${open === "filters" ? PANEL_OPEN : PANEL_CLOSED}`}
-      >
-        <CardKindFilter value={filters.kind} onChange={(kind) => onChange({ ...filters, kind })} />
-
-        <Group label="Credential group (pick one or more)">
-          {CREDENTIAL_GROUPS.map((g) => (
-            <Chip
-              key={g}
-              pressed={filters.groups.includes(g)}
-              onClick={() =>
-                onChange({
-                  ...filters,
-                  groups: filters.groups.includes(g)
-                    ? filters.groups.filter((x) => x !== g)
-                    : [...filters.groups, g].sort(),
-                })
-              }
-            >
-              {GROUP_META[g].label}
-            </Chip>
-          ))}
-        </Group>
-
-        <Group label="Significance">
-          {(Object.keys(CATEGORY_META) as Category[]).map((c) => (
-            <Chip
-              key={c}
-              pressed={filters.category === c}
-              onClick={() => onChange({ ...filters, category: filters.category === c ? null : c })}
-            >
-              {CATEGORY_META[c].label}
-            </Chip>
-          ))}
-        </Group>
-        {filters.category && <p className="-mt-2 text-xs text-muted-foreground">{CATEGORY_META[filters.category].blurb}</p>}
-
-        <Group label="Budget">
-          {BUDGETS.filter((b) => b.id !== "any").map((b) => (
-            <Chip
-              key={b.id}
-              pressed={filters.budget === b.id}
-              onClick={() => onChange({ ...filters, budget: filters.budget === b.id ? null : b.id })}
-            >
-              {b.label}
-            </Chip>
-          ))}
-        </Group>
-
-        <div className="flex items-center justify-between gap-2 border-t border-border pt-3">
-          <p className="text-sm font-semibold tabular-nums" aria-live="polite">
-            {shown} of {CARDS.length} items match
-          </p>
-          {n > 0 && (
-            <Button type="button" variant="ghost" size="md" onClick={() => onChange(NO_FILTERS)} className="px-3 text-civic">
-              <X className="size-4" aria-hidden="true" /> Clear
-            </Button>
+          <Group label="Significance">
+            {(Object.keys(CATEGORY_META) as Category[]).map((c) => (
+              <Chip
+                key={c}
+                on={filters.category === c}
+                onClick={() =>
+                  onChange({
+                    ...filters,
+                    category: filters.category === c ? null : c,
+                  })
+                }
+              >
+                {CATEGORY_META[c].label}
+              </Chip>
+            ))}
+          </Group>
+          {filters.category && (
+            <p className="-mt-2 text-xs text-muted-foreground">
+              {CATEGORY_META[filters.category].blurb}
+            </p>
           )}
+
+          <Group label="Budget">
+            {BUDGETS.filter((b) => b.id !== "any").map((b) => (
+              <Chip
+                key={b.id}
+                on={filters.budget === b.id}
+                onClick={() =>
+                  onChange({
+                    ...filters,
+                    budget: filters.budget === b.id ? null : b.id,
+                  })
+                }
+              >
+                {b.label}
+              </Chip>
+            ))}
+          </Group>
+
+          <div className="flex items-center justify-between border-t border-border pt-3">
+            <p className="text-sm font-semibold" aria-live="polite">
+              {shown} of {CARDS.length} items match
+            </p>
+            {n > 0 && (
+              <button
+                type="button"
+                onClick={() => onChange(NO_FILTERS)}
+                className="inline-flex items-center gap-1 rounded-lg px-2 py-1 text-sm font-bold text-civic hover:bg-muted"
+              >
+                <X className="size-4" aria-hidden="true" /> Clear
+              </button>
+            )}
+          </div>
         </div>
-      </section>
-    </>
+      )}
+    </div>
   );
 }
 
-function Group({ label, children }: { label: string; children: React.ReactNode }) {
-  const id = useId();
+function Group({
+  label,
+  children,
+}: {
+  label: string;
+  children: React.ReactNode;
+}) {
   return (
-    <div role="group" aria-labelledby={id}>
-      <p id={id} className="mb-2 text-[13px] font-semibold text-civic">{label}</p>
+    <div>
+      <p className="mb-2 text-xs font-bold uppercase tracking-wider text-civic">
+        {label}
+      </p>
       <div className="flex flex-wrap gap-2">{children}</div>
     </div>
+  );
+}
+
+function Chip({
+  on,
+  onClick,
+  children,
+}: {
+  on: boolean;
+  onClick: () => void;
+  children: React.ReactNode;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      aria-pressed={on}
+      className={`rounded-full border-2 px-3 py-1.5 text-sm font-bold transition-colors ${
+        on
+          ? "border-civic bg-civic text-white"
+          : "border-border bg-white text-navy hover:bg-muted"
+      }`}
+    >
+      {children}
+    </button>
   );
 }

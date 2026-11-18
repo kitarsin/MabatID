@@ -15,7 +15,7 @@ export function BarangayIdFields({
   const validity = documentValidity(value);
   return (
     <fieldset className="space-y-3 rounded-2xl border-2 border-civic bg-card p-4">
-      <legend className="px-1 text-sm font-bold">
+      <legend className="px-1 text-sm font-extrabold">
         Your Barangay ID details
       </legend>
       <p role="status" className="text-sm font-semibold">
@@ -46,10 +46,10 @@ export function BarangayIdFields({
           }
         />
       </div>
-      <label className="flex min-h-11 items-start gap-3 py-2 text-sm">
+      <label className="flex items-start gap-2 text-sm">
         <input
           type="checkbox"
-          className="mt-0.5 size-5 shrink-0 accent-civic"
+          className="mt-1 size-4 shrink-0 accent-civic"
           checked={!!value.noPrintedExpiry}
           onChange={(e) =>
             onChange({
@@ -81,10 +81,10 @@ export function BarangayIdFields({
           />
         </div>
       ) : (
-        <label className="flex min-h-11 items-start gap-3 py-2 text-sm">
+        <label className="flex items-start gap-2 text-sm">
           <input
             type="checkbox"
-            className="mt-0.5 size-5 shrink-0 accent-civic"
+            className="mt-1 size-4 shrink-0 accent-civic"
             checked={!!value.validityConfirmed}
             onChange={(e) =>
               onChange({ ...value, validityConfirmed: e.target.checked })
@@ -113,10 +113,10 @@ export function BarangayIdFields({
           ],
         ] as const
       ).map(([key, label]) => (
-        <label key={key} className="flex min-h-11 items-start gap-3 py-2 text-sm">
+        <label key={key} className="flex items-start gap-2 text-sm">
           <input
             type="checkbox"
-            className="mt-0.5 size-5 shrink-0 accent-civic"
+            className="mt-1 size-4 shrink-0 accent-civic"
             checked={value[key] === true}
             onChange={(e) => onChange({ ...value, [key]: e.target.checked })}
           />

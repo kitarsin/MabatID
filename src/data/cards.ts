@@ -273,7 +273,7 @@ export const CARDS: IdCard[] = [
     id: "passport",
     kind: "id",
     category: "primary",
-    name: "Philippine Passport",
+    name: "Philippine ePassport",
     short: "Passport",
     group: "identity",
     groupReason:

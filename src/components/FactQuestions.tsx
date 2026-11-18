@@ -1,6 +1,5 @@
 "use client";
 
-import { Chip } from "@/components/ui/chip";
 import { FACTS, type FactId, type ProfileFacts } from "@/data/facts";
 
 export function FactQuestions({
@@ -15,23 +14,23 @@ export function FactQuestions({
   return (
     <div className="space-y-3">
       {[...new Set(ids)].map((id) => (
-        <fieldset key={id} className="rounded-[20px] bg-white p-4 ring-1 ring-navy/[0.08]">
-          <legend className="float-left mb-3 w-full text-sm leading-relaxed font-medium text-navy">
-            {FACTS[id]}
-          </legend>
-          <div className="clear-both flex flex-wrap gap-2">
+        <fieldset key={id} className="rounded-xl border border-border p-3">
+          <legend className="px-1 text-sm font-semibold">{FACTS[id]}</legend>
+          <div className="flex flex-wrap gap-2">
             {[
               { label: "Yes", value: true },
               { label: "No", value: false },
               { label: "Not sure", value: undefined },
             ].map((option) => (
-              <Chip
+              <button
                 key={option.label}
-                pressed={facts[id] === option.value}
+                type="button"
+                aria-pressed={facts[id] === option.value}
                 onClick={() => onChange(id, option.value)}
+                className={`rounded-lg border-2 px-3 py-2 text-sm font-bold ${facts[id] === option.value ? "border-civic bg-mist text-navy" : "border-border bg-card"}`}
               >
                 {option.label}
-              </Chip>
+              </button>
             ))}
           </div>
         </fieldset>

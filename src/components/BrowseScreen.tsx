@@ -1,11 +1,10 @@
 "use client";
 
-import { useMemo, useRef, useState } from "react";
-import { Building2, Check, Globe, Search, X } from "lucide-react";
-import { Chip } from "@/components/ui/chip";
-import { Pill } from "@/components/ui/pill";
+import { useMemo, useState } from "react";
+import { Building2, Check, Globe, Search } from "lucide-react";
 import {
   CARDS,
+  CARD_KIND_META,
   CATEGORY_META,
   GROUP_META,
   CREDENTIAL_GROUPS,
@@ -33,7 +32,6 @@ export function BrowseScreen({
 }) {
   const [q, setQ] = useState("");
   const [cat, setCat] = useState<Category | null>(null);
-  const searchRef = useRef<HTMLInputElement>(null);
 
   const list = useMemo(() => {
     const term = q.trim().toLowerCase();
@@ -50,13 +48,14 @@ export function BrowseScreen({
   }, [q, cat, kind]);
 
   return (
-    <div className="mx-auto w-full max-w-md space-y-6 px-5 pb-12 pt-6">
+    <div className="mx-auto w-full max-w-md space-y-4 px-5 pb-10 pt-5">
       <div>
-        <h1 className="text-2xl font-semibold leading-tight tracking-tight text-navy">
+        <h1 className="text-2xl font-extrabold tracking-tight">
           IDs &amp; documents
         </h1>
-        <p className="mt-1.5 text-[15px] text-muted-foreground">
-          What each one needs and how to get it.
+        <p className="text-sm text-muted-foreground">
+          Browse every ID and document — requirements, steps and official
+          references.
         </p>
       </div>
 
@@ -68,51 +67,38 @@ export function BrowseScreen({
           aria-hidden="true"
         />
         <input
-          ref={searchRef}
           type="search"
           value={q}
           onChange={(e) => setQ(e.target.value)}
-          placeholder="Search by name or office…"
+          placeholder="Search by name or agency"
           aria-label="Search IDs and documents"
-          autoComplete="off"
-          enterKeyHint="search"
-          spellCheck={false}
-          className="h-12 w-full rounded-full border border-navy/10 bg-white pl-11 pr-12 shadow-[0_1px_2px_rgb(27_54_93/0.05)] text-base transition-colors duration-[var(--dur-fast)] focus-visible:border-civic [&::-webkit-search-cancel-button]:appearance-none"
+          className="h-12 w-full rounded-2xl border-2 border-input bg-card pl-11 pr-4 text-base outline-none focus:border-civic"
         />
-        {q && (
-          <button
-            type="button"
-            aria-label="Clear search"
-            onClick={() => {
-              setQ("");
-              searchRef.current?.focus();
-            }}
-            className="absolute right-1 top-1/2 grid size-11 -translate-y-1/2 place-items-center rounded-xl text-muted-foreground hover:bg-muted"
-          >
-            <X className="size-5" aria-hidden="true" />
-          </button>
-        )}
       </div>
 
       <CardKindFilter value={kind} onChange={onKindChange} />
 
       <div
-        className="-mx-5 flex gap-2 overflow-x-auto px-5 py-1.5"
+        className="-mx-5 flex gap-2 overflow-x-auto px-5 pb-1"
         role="group"
         aria-label="Filter by significance"
       >
-        <Chip pressed={cat === null} onClick={() => setCat(null)}>
+        <Chip on={cat === null} onClick={() => setCat(null)}>
           All
         </Chip>
         {(Object.keys(CATEGORY_META) as Category[]).map((c) => (
-          <Chip key={c} pressed={cat === c} onClick={() => setCat(cat === c ? null : c)}>
+          <Chip
+            key={c}
+            on={cat === c}
+            onClick={() => setCat(cat === c ? null : c)}
+          >
             {CATEGORY_META[c].label}
           </Chip>
         ))}
       </div>
 
       <p
-        className="text-sm font-semibold tabular-nums text-muted-foreground"
+        className="text-sm font-semibold text-muted-foreground"
         aria-live="polite"
       >
         {list.length} of {CARDS.length} items
@@ -123,22 +109,25 @@ export function BrowseScreen({
           {q.trim()
             ? `No items match “${q.trim()}” with these filters.`
             : "No items match these filters."}{" "}
-          Try a different filter or search.
+          Try another type, category or search.
         </p>
       )}
 
-      {CREDENTIAL_GROUPS.map((g) => {
-        const items = list.filter((c) => c.group === g);
+      {CREDENTIAL_GROUPS.map((t) => {
+        const items = list.filter((c) => c.group === t);
         if (!items.length) return null;
         return (
-          <section key={g} aria-labelledby={`browse-group-${g}`} className="pt-4">
+          <section key={t} aria-labelledby={`browse-group-${t}`}>
             <h2
-              id={`browse-group-${g}`}
-              className="mb-4 text-xs font-semibold tracking-wide text-muted-foreground uppercase"
+              id={`browse-group-${t}`}
+              className="text-xs font-bold uppercase tracking-wider text-civic"
             >
-              {GROUP_META[g].label}
+              {GROUP_META[t].label}
             </h2>
-            <ul className="space-y-3">
+            <p className="mb-3 mt-1 text-xs text-muted-foreground">
+              {GROUP_META[t].blurb}
+            </p>
+            <ul className="space-y-2">
               {items.map((c) => {
                 const d = DETAILS[c.id];
                 return (
@@ -146,42 +135,53 @@ export function BrowseScreen({
                     <button
                       type="button"
                       onClick={() => onOpen(c.id)}
-                      data-card-id={c.id}
-                      className="flex w-full gap-4 rounded-[20px] bg-card p-4 text-left ring-1 ring-navy/[0.08] transition-[background-color,scale] duration-[var(--dur-fast)] ease-[var(--ease-out)] hover:bg-muted active:scale-[0.985] active:duration-[var(--dur-press)]"
+                      className="flex w-full gap-3 rounded-2xl bg-card p-3.5 text-left shadow-sm ring-1 ring-border transition-colors hover:bg-muted"
                     >
                       <span className="grid size-12 shrink-0 place-items-center rounded-full border-2 border-civic bg-white text-civic">
                         <CardIcon name={c.icon} className="size-6" />
                       </span>
                       <span className="min-w-0 flex-1">
                         <span className="flex items-start justify-between gap-2">
-                          <span className="text-[15px] font-semibold leading-snug">
+                          <span className="text-[15px] font-extrabold leading-snug">
                             {c.name}
                           </span>
                           {owned.has(c.id) && (
-                            <Pill tone="amber" className="shrink-0">
-                              <Check className="size-3" strokeWidth={3} aria-hidden="true" /> Have
-                            </Pill>
+                            <span className="inline-flex shrink-0 items-center gap-1 rounded-full bg-amber px-2 py-0.5 text-[11px] font-extrabold text-navy">
+                              <Check
+                                className="size-3"
+                                strokeWidth={3}
+                                aria-hidden="true"
+                              />{" "}
+                              Have
+                            </span>
                           )}
                         </span>
                         <span className="mt-0.5 block text-xs font-semibold text-muted-foreground">
                           {d.issuedBy}
                         </span>
-                        <span className="mt-2 line-clamp-2 block text-sm leading-relaxed text-muted-foreground">
+                        <span className="mt-1.5 block text-sm leading-snug">
                           <Rich text={d.req.fee} />
                         </span>
-                        <span className="mt-3 flex flex-wrap gap-1.5">
-                          {c.starter && <Pill>Starter ID</Pill>}
-                          <Pill>{CATEGORY_META[c.category].label}</Pill>
+                        <span className="mt-2 flex flex-wrap gap-1.5">
+                          {c.starter && <Tag>Starter ID</Tag>}
+                          <Tag>{CARD_KIND_META[c.kind].singular}</Tag>
+                          <Tag>{CATEGORY_META[c.category].label}</Tag>
                           {d.onsite && (
-                            <Pill>
-                              <Building2 className="size-3" aria-hidden="true" /> On-site
-                            </Pill>
+                            <Tag>
+                              <Building2
+                                className="size-3"
+                                aria-hidden="true"
+                              />{" "}
+                              On-site
+                            </Tag>
                           )}
                           {d.online && (
-                            <Pill>
+                            <Tag>
                               <Globe className="size-3" aria-hidden="true" />{" "}
-                              {d.onlineRequiresVisit ? "Online + visit" : "Online"}
-                            </Pill>
+                              {d.onlineRequiresVisit
+                                ? "Online + visit"
+                                : "Online"}
+                            </Tag>
                           )}
                         </span>
                       </span>
@@ -194,5 +194,38 @@ export function BrowseScreen({
         );
       })}
     </div>
+  );
+}
+
+function Chip({
+  on,
+  onClick,
+  children,
+}: {
+  on: boolean;
+  onClick: () => void;
+  children: React.ReactNode;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      aria-pressed={on}
+      className={`shrink-0 rounded-full border-2 px-3.5 py-1.5 text-sm font-bold ${
+        on
+          ? "border-civic bg-civic text-white"
+          : "border-border bg-white text-navy hover:bg-muted"
+      }`}
+    >
+      {children}
+    </button>
+  );
+}
+
+function Tag({ children }: { children: React.ReactNode }) {
+  return (
+    <span className="inline-flex items-center gap-1 rounded-full bg-mist px-2 py-0.5 text-[11px] font-bold text-navy">
+      {children}
+    </span>
   );
 }
