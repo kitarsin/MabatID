@@ -116,7 +116,7 @@ Server authentication and a persistent database remain future backend work. Befo
 
 ## Manual profile backup and restore
 
-Open **Progress → Backup & restore**, or **Open device profile → Backup & restore** before creating a profile. Select any saved profile and download its JSON backup. On the other browser/device, select that file, review its identity/content and differences, and import it. Selecting or canceling a file changes no saved data. Files are read locally; no backup service, login, email, transfer-code service, or cloud storage is involved. Backups contain personal information, are **not encrypted**, and do **not continuously synchronize** devices. Keep files private. Clearing browser storage still deletes local profiles and local undo data; keep a separate file backup.
+Open **Settings → Backup & restore**, or **Open device profile → Backup & restore** before creating a profile. Select any saved profile and download its JSON backup. On the other browser/device, select that file, review its identity/content and differences, and import it. Selecting or canceling a file changes no saved data. Files are read locally; no backup service, login, email, transfer-code service, or cloud storage is involved. Backups contain personal information, are **not encrypted**, and do **not continuously synchronize** devices. Keep files private. Clearing browser storage still deletes local profiles and local undo data; keep a separate file backup.
 
 ### Format and validation
 
@@ -152,7 +152,7 @@ Writes require **Web Locks** and Web Crypto in a secure context (HTTPS or localh
 
 `src/lib/backup.ts` handles the transport-independent envelope/validation/differences; `revisions.ts` handles content identity and ancestry; `profile-repository.ts` owns migration, preview, transactional commits and undo. A future transfer-code service should return this same JSON envelope and call the same preview/commit flow. It must never write profiles directly. The existing transfer-code preview remains disconnected; this change adds no transfer backend.
 
-Settings integration (no Settings layout/navigation changes required here):
+Settings renders the reusable adapter below. Other client screens can use the same integration:
 
 ```tsx
 // Inside an existing client Settings component, under StoreProvider:

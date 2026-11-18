@@ -9,6 +9,7 @@ import { BUDGETS, DEFAULT_SETUP, SETUPS, type Budget, type Setup } from "@/lib/p
 import type { User } from "@/lib/store";
 import { CardIcon } from "./icons";
 import { TransferPanel } from "./TransferPanel";
+import { ProfileBackupRestore } from "./BackupRestorePanel";
 
 const INVENTORY = [...CARDS, ...EXTRA_DOCUMENTS];
 
@@ -50,6 +51,7 @@ export function SettingsScreen({
           </Button>
         </section>
       )}
+      <ProfileBackupRestore />
       <TransferPanel me={me} onImport={onImport} />
     </div>
   );

@@ -47,7 +47,6 @@ import { Logo } from "./Logo";
 import { Onboarding } from "./Onboarding";
 import { GuideScreen } from "./GuideScreen";
 import { ProgressScreen } from "./ProgressScreen";
-import { ProfileBackupRestore } from "./BackupRestorePanel";
 import { SettingsScreen } from "./SettingsScreen";
 import { SkillTree } from "./SkillTree";
 import { TrackingBar } from "./TrackingBar";
@@ -512,7 +511,6 @@ export function App() {
                     Your progress
                   </h1>
                   {suggestions}
-                  <ProfileBackupRestore />
                   <div className="rounded-[24px] bg-mist/40 p-5 ring-1 ring-sky/25">
                     <p className="font-semibold text-navy">Save your progress</p>
                     <p className="mt-1.5 text-sm leading-relaxed text-muted-foreground">
