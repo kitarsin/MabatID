@@ -1,3 +1,4 @@
+import type { RevisionHistory } from "./revisions";
 import { CARDS } from "@/data/cards";
 import { DETAILS } from "@/data/details";
 import { EXTRA_DOCUMENTS } from "@/data/documents";
@@ -8,6 +9,7 @@ import { normalizeEvidence, type DocumentEvidenceMap } from "./documents";
 
 /** Device profiles are not accounts or proof of identity. Never store credentials here. */
 export interface User {
+  revision?: RevisionHistory;
   id: string;
   name: string;
   age: number;

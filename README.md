@@ -20,7 +20,7 @@ npm run build
 
 The app supports device profiles, document ownership, eligibility answers, acquisition planning, target tracking, requirements checklists and application progress. Any ID can be tracked before its prerequisites are ready. Ownership can be recorded independently of the acquisition procedure.
 
-Device profiles are **not authenticated accounts**. They use browser localStorage, are accessible to anyone using that browser, and do not sync. No passwords or email addresses are collected. Real server authentication and persistence are part of the backend integration.
+Device profiles are **not authenticated accounts**. They use browser localStorage, are accessible to anyone using that browser, and do not sync. No passwords or email addresses are collected. Manual JSON backup and restore moves saved profiles between devices without an account or storage service.
 
 On first load, v1 mock accounts migrate to credential-free profiles. Names, ages, documents and goals are retained. Password hashes and email addresses are removed from browser storage after the replacement is saved. Positional v1 checklist ticks are reset because their meaning changed; migrated profiles show a review notice.
 
@@ -67,7 +67,7 @@ Optional request fields are `documents` (date/format evidence only), `prep` (sta
 
 The client debounces changes and cancels stale requests. Users can compare alternatives, expand requirements and procedures, and open any prerequisite guide. **Start with …** applies the chosen application modes, tracks the final goal for a device profile, and opens the first guide. Requirement alternatives remain suggestions; they are not stored as a frozen plan. Recommendations are recalculated as documents and answers change. Starting a path never marks a document as owned or ticks a preparation task.
 
-Both endpoints are stateless and does not save profiles. It receives only the allowlisted planning fields, without names, ID numbers, document scans, email addresses, or credentials. Authentication, durable plans, and cross-device progress still need a server persistence layer.
+Both endpoints are stateless and do not save profiles. They receive only the allowlisted planning fields, without names, ID numbers, document scans, email addresses, or credentials. Manual JSON backups move saved progress between devices; these endpoints provide neither profile storage nor synchronization.
 
 ## ID and document filters
 
@@ -113,3 +113,55 @@ Source references are embedded in the card: [PSAHelpline delivery IDs](https://p
 The research catalog is provisional. References are included, but fees, eligibility, document acceptance, local variations, and all procedures still need an authoritative review and versioned source records. Passing software tests establishes consistent behavior, not government acceptance.
 
 Server authentication and a persistent database remain future backend work. Before exposing the planning endpoints publicly, add deployment-level rate limits and resource monitoring; its per-request search and body limits do not limit request volume.
+
+## Manual profile backup and restore
+
+Open **Progress → Backup & restore**, or **Open device profile → Backup & restore** before creating a profile. Select any saved profile and download its JSON backup. On the other browser/device, select that file, review its identity/content and differences, and import it. Selecting or canceling a file changes no saved data. Files are read locally; no backup service, login, email, transfer-code service, or cloud storage is involved. Backups contain personal information, are **not encrypted**, and do **not continuously synchronize** devices. Keep files private. Clearing browser storage still deletes local profiles and local undo data; keep a separate file backup.
+
+### Format and validation
+
+Format version 1 is an object with `format: "mabatid-profile-backup"`, `version: 1`, informational ISO `exportedAt`, `profile`, `contentHash`, and optional `revision`. The profile holds the permanent `id`, nickname (`name`), applicant age, creation/setup/review metadata, owned document IDs, document issue/expiry dates and format confirmations, eligibility answers (`facts`), budget/application preferences, tracked goals/priority, stable checklist keys (`prep`), and chosen application routes (`modes`). Computed recommendations are excluded and recalculated from these inputs and the current catalog. The active selection, unrelated profiles and replacement undo snapshot are not exported.
+
+The content fingerprint is SHA-256 of UTF-8 canonical JSON from `profileContent` in `src/lib/revisions.ts`: sorted object keys, sorted/deduplicated set arrays, explicit defaults, and omitted empty map entries. Whitespace, JSON key order, list order, and export time do not change content identity. Each revision has `nonce` (random UUID), `parents` (zero to two revision IDs), `contentHash`, and `id`. Its ID is SHA-256 of canonical `{ profileId, nonce, parents, contentHash }`. This binds ancestry to content and permanent identity. Fingerprints detect damage and inconsistent metadata; they are not signatures or proof of authenticity. Someone who controls a file can deliberately recompute them.
+
+Files are limited to **1 MiB**, depth 12, 20,000 visited values, 256 object entries, 512 array entries, 2,048-character strings (individual fields have tighter limits), and 64 revision nodes. Invalid JSON, unsafe property names, wrong field types, invalid document dates, unsupported format versions, and content-fingerprint mismatches are rejected before saving. Missing/invalid/content-mismatched revision metadata is explicitly reported as unreliable and requires acknowledgment; it cannot establish freshness. Obsolete/unrecognized catalog IDs, checklist keys, evidence fields, answers and preferences are listed for review. Importing a sanitized profile requires acknowledgment and records a new revision when its prior history no longer matches its content. Invalid raw files cannot silently reset existing profiles.
+
+### Comparison, replacement and undo
+
+Profiles match by permanent ID, never nickname. Renaming preserves identity; **Keep both** assigns a new permanent ID and independent root revision. The shared engine compares validated revision ancestry:
+
+| Evidence | Result |
+| --- | --- |
+| Same saved content | Already up to date |
+| Incoming history contains current revision | Imported version is newer |
+| Current history contains incoming revision | Backup is older |
+| Complete histories diverge after a shared revision | Conflict |
+| Missing, invalid, unrelated, or insufficient/pruned ancestry | Cannot reliably determine freshness |
+
+Neither device clocks, file dates, export dates, document counts, checklist totals, nor incrementing counters decide freshness. A newly exported file can contain older progress, and a newer revision can remove IDs or uncheck tasks. Meaningful normalized edits create revisions; no-op updates, selection changes and exports do not. History is bounded to the 64 nearest reachable nodes, retaining both parents of a resolution before older ancestors. Pruning may make comparison uncertain; direct proven ancestry still works across a pruned boundary when the relevant nodes remain. No automatic content merging occurs.
+
+Preview shows additions/removals, nickname/age/metadata, changed answers/preferences, document evidence, routes, goals and checklist changes. Every replacement requires an explicit checkbox confirmation, even if newer. Older/conflicting/unknown versions can be chosen deliberately. Newer versions preserve their incoming revision; explicit rollback or conflict/unknown resolution creates a new revision descending from the current head and, when valid, the incoming head. Cancel leaves storage untouched. Commit rechecks the target, including its revision metadata; if it changed or appeared/disappeared after preview, review again. Unrelated profiles are retained.
+
+One previous replacement snapshot is stored locally with the profiles and survives reload. **Undo last replacement** restores only that profile's content as a new revision. It is disabled after any later meaningful edit to that profile (even if an edit later restores identical content). Changing another profile or the active selection does not invalidate undo. Another replacement replaces the single undo snapshot. File backups do not include undo snapshots.
+
+### Persistence and integration
+
+Profiles, active selection, revision ancestry and the one undo snapshot are saved atomically in `mabatid.profiles.v3`. Existing v2 profiles are migrated with identities, ownership/evidence, stable progress, preferences and active selection intact; the original v2 keys are retained as migration recovery data and are not updated afterward. Legacy v1 mock profiles keep valid stable keys, discard obsolete positional ticks and receive a review notice; legacy credential records are removed only after the new record saves. Failed/corrupt migrations leave their sources untouched. Clearing only v3 manually can therefore expose the older v2 recovery data on the next migration.
+
+Writes require **Web Locks** and Web Crypto in a secure context (HTTPS or localhost). Cooperating tabs serialize the complete read/check/write transaction under `mabatid-profile-storage`, use current durable data, reject stale target edits (including full-form edits checked against the version that initialized the form), and refresh on storage/focus events. An additional raw-storage check rejects changes during asynchronous work. Storage denial/quota errors leave the saved record intact and the app publishes no successful candidate state. External tools or older app versions that ignore these locks are not supported concurrent writers; avoid running old and new app versions against the same browser storage. The localStorage record is atomic, but browser storage is not a durable server database.
+
+`src/lib/backup.ts` handles the transport-independent envelope/validation/differences; `revisions.ts` handles content identity and ancestry; `profile-repository.ts` owns migration, preview, transactional commits and undo. A future transfer-code service should return this same JSON envelope and call the same preview/commit flow. It must never write profiles directly. The existing transfer-code preview remains disconnected; this change adds no transfer backend.
+
+Settings integration (no Settings layout/navigation changes required here):
+
+```tsx
+// Inside an existing client Settings component, under StoreProvider:
+import { ProfileBackupRestore } from "@/components/BackupRestorePanel";
+
+// Render wherever Settings wants its backup section:
+<ProfileBackupRestore />
+```
+
+For another host or tests, render `<BackupRestorePanel controller={controller} onImported={onImported} />`. The `BackupRestoreController` type in `src/lib/store.tsx` specifies saved `users`, `activeId`, `undoSnapshot`, `downloadBackup(id)`, `previewBackup(json)`, `commitBackup(preview, choice, { confirmed, acknowledged })` and `undoReplacement(token)`. Reads produce no profile mutations; commits return `null` only after persistence succeeds, otherwise an error string. `onImported` runs only after successful persistence. Callbacks must be passed within a client boundary.
+
+The `npm test` suite includes complete round trips, removals/corrections, misleading export dates and reversed clocks, conflicts, missing/tampered/pruned history, renamed and separate identities, no-op saves, validation limits, catalog sanitization, migration and storage failure, concurrent/stale writes, targeted replacement, keep-both and undo after reload.

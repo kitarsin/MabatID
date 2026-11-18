@@ -15,6 +15,7 @@ import {
   type Setup,
 } from "@/lib/prefs";
 import type { User } from "@/lib/store";
+import { profileToken } from "@/lib/revisions";
 import type { DocumentEvidenceMap } from "@/lib/documents";
 import { BarangayIdFields } from "./BarangayIdFields";
 import { CardIcon } from "./icons";
@@ -35,9 +36,11 @@ export function Onboarding({
     budget: Budget;
     setup: Setup;
     age: number;
-  }) => void;
+  }, expectedToken: string | null) => void;
   onCancel: () => void;
 }) {
+  // A full-form save must check the version used to initialize these local fields.
+  const [baseToken] = useState(() => profileToken(me));
   const [age, setAge] = useState(me.age);
   const validAge = Number.isInteger(age) && age >= 0 && age <= 120;
   const [documents, setDocuments] = useState<DocumentEvidenceMap>(
@@ -215,7 +218,7 @@ export function Onboarding({
             size="xl"
             disabled={!validAge}
             onClick={() =>
-              onSave({ owned: [...owned], documents, budget, setup, age })
+              onSave({ owned: [...owned], documents, budget, setup, age }, baseToken)
             }
             className="flex-1"
           >

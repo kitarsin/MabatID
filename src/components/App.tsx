@@ -34,6 +34,7 @@ import type { Budget, Setup } from "@/lib/prefs";
 import { CARD_BY_ID } from "@/data/cards";
 import type { Screen, View } from "@/lib/route";
 import { useStore } from "@/lib/store";
+import { profileToken } from "@/lib/revisions";
 import { useAppRoute } from "@/lib/useAppRoute";
 import { useHydrated } from "@/lib/useHydrated";
 import { AppLoading } from "./AppLoading";
@@ -46,6 +47,7 @@ import { Logo } from "./Logo";
 import { Onboarding } from "./Onboarding";
 import { GuideScreen } from "./GuideScreen";
 import { ProgressScreen } from "./ProgressScreen";
+import { ProfileBackupRestore } from "./BackupRestorePanel";
 import { SettingsScreen } from "./SettingsScreen";
 import { SkillTree } from "./SkillTree";
 import { TrackingBar } from "./TrackingBar";
@@ -294,9 +296,11 @@ export function App() {
           }
         }
         editing={!me || !!me.onboarded}
-        onSave={(p) => {
-          if (me) savePrefs(p);
-          else {
+        onSave={async (p, expectedToken) => {
+          if (me) {
+            const problem = await savePrefs(p, expectedToken);
+            if (problem) return;
+          } else {
             setGuestAge(p.age);
             setGuestOwned(p.owned);
             setGuestDocuments(p.documents);
@@ -478,7 +482,7 @@ export function App() {
             <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain pb-6">
               <SettingsScreen
                 me={me}
-                onSavePrefs={savePrefs}
+                onSavePrefs={(p) => { void savePrefs(p, profileToken(me ?? undefined)); }}
                 onEditCollection={() => go("edit")}
                 onSwitchProfile={() => {
                   logout();
@@ -508,6 +512,7 @@ export function App() {
                     Your progress
                   </h1>
                   {suggestions}
+                  <ProfileBackupRestore />
                   <div className="rounded-[24px] bg-mist/40 p-5 ring-1 ring-sky/25">
                     <p className="font-semibold text-navy">Save your progress</p>
                     <p className="mt-1.5 text-sm leading-relaxed text-muted-foreground">

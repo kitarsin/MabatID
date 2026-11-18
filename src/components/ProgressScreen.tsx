@@ -10,6 +10,7 @@ import { statusOf } from "@/lib/tree";
 import { fitsBudget, fitsSetup } from "@/lib/prefs";
 import type { User } from "@/lib/store";
 import { GroupGuide } from "./GroupGuide";
+import { ProfileBackupRestore } from "./BackupRestorePanel";
 
 const INVENTORY = [...CARDS, ...EXTRA_DOCUMENTS];
 
@@ -66,6 +67,7 @@ export function ProgressScreen({
         </p>
       )}
       {suggestions}
+      <ProfileBackupRestore />
 
       <section aria-labelledby="tracking">
         <h2 id="tracking" className="text-lg font-semibold tracking-tight text-navy">

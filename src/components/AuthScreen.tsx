@@ -7,6 +7,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useStore } from "@/lib/store";
 import { Logo } from "./Logo";
+import { ProfileBackupRestore } from "./BackupRestorePanel";
 
 type FieldName = "name" | "age";
 
@@ -19,21 +20,25 @@ export function AuthScreen({
   onDone: () => void;
 }) {
   const { users, createProfile, selectProfile } = useStore();
+  const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [errorField, setErrorField] = useState<FieldName | null>(null);
-  function submit(event: FormEvent<HTMLFormElement>) {
+  async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
+    if (saving) return;
     const form = new FormData(event.currentTarget);
-    const error = createProfile({
+    setSaving(true);
+    const error = await createProfile({
       name: String(form.get("name") ?? ""),
       age: Number(form.get("age")),
     });
+    setSaving(false);
     setError(error);
     if (error) {
       // The store reports one message per problem ("Enter a name…" / "Enter an age…"); mark that field and focus it.
-      const field: FieldName = /\bage\b/i.test(error) ? "age" : "name";
+      const field: FieldName | null = /\bage\b/i.test(error) ? "age" : /\bname\b/i.test(error) ? "name" : null;
       setErrorField(field);
-      document.getElementById(field)?.focus();
+      if (field) document.getElementById(field)?.focus();
     } else {
       setErrorField(null);
       onDone();
@@ -76,9 +81,12 @@ export function AuthScreen({
               key={user.id}
               variant="outline"
               className="h-auto min-h-12 w-full justify-start whitespace-normal break-words text-left"
-              onClick={() => {
-                selectProfile(user.id);
-                onDone();
+              disabled={saving}
+              onClick={async () => {
+                setSaving(true);
+                const problem = await selectProfile(user.id);
+                setSaving(false);
+                if (problem) setError(problem); else onDone();
               }}
             >
               {user.name}
@@ -129,10 +137,11 @@ export function AuthScreen({
             {error}
           </p>
         )}
-        <Button type="submit" variant="brand" size="xl" className="w-full">
+        <Button type="submit" variant="brand" size="xl" className="w-full" disabled={saving}>
           Create device profile
         </Button>
       </form>
+      <div className="mt-8"><ProfileBackupRestore onImported={onDone} /></div>
     </main>
   );
 }
