@@ -52,17 +52,6 @@ import { SkillTree } from "./SkillTree";
 import { TrackingBar } from "./TrackingBar";
 import { TreeToolbar } from "./TreeToolbar";
 
-/** Per-screen document titles. The landing keeps the page's default title. */
-const PAGE_TITLES: Record<string, string> = {
-  auth: "Device profile · MabatID",
-  tree: "Your ID path · MabatID",
-  browse: "Browse IDs & documents · MabatID",
-  progress: "Your progress · MabatID",
-  settings: "Settings · MabatID",
-  guide: "Guides · MabatID",
-  onboarding: "Your checklist · MabatID",
-};
-
 export function App() {
   const {
     ready: storeReady,
@@ -263,13 +252,10 @@ export function App() {
     />
   );
 
-  // Screen changes are instant swaps, so tell assistive tech: update the title and move focus to <main>.
-  const baseTitle = useRef<string | null>(null);
+  // Screen changes are instant swaps, so move focus to <main> for assistive tech.
   const lastPage = useRef<string | null>(null);
   useEffect(() => {
     if (!ready) return;
-    if (baseTitle.current === null) baseTitle.current = document.title;
-    document.title = PAGE_TITLES[page] ?? baseTitle.current;
     if (lastPage.current && lastPage.current !== page)
       document.getElementById("main")?.focus({ preventScroll: true });
     lastPage.current = page;

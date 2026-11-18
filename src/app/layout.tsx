@@ -8,7 +8,7 @@ const jakarta = Plus_Jakarta_Sans({
 });
 
 export const metadata: Metadata = {
-  title: "MabatID — Alamin ang iyong mga ID",
+  title: "MabatID",
   description:
     "A step-by-step path from baseline documents to primary Philippine government IDs.",
 };
