@@ -1,13 +1,14 @@
 "use client";
 
-import { useState, type FormEvent } from "react";
-import { ArrowLeft } from "lucide-react";
+import { useId, useState, type FormEvent } from "react";
+import { ArrowLeft, FileUp, KeyRound } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useStore } from "@/lib/store";
 import { Logo } from "./Logo";
 import { ProfileBackupRestore } from "./BackupRestorePanel";
+import { ProfileTransfers } from "./TransferPanel";
 
 type FieldName = "name" | "age";
 
@@ -20,6 +21,8 @@ export function AuthScreen({
   onDone: () => void;
 }) {
   const { users, createProfile, selectProfile } = useStore();
+  const restoreId = useId();
+  const [restoreMethod, setRestoreMethod] = useState<"file" | "code" | null>(null);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [errorField, setErrorField] = useState<FieldName | null>(null);
@@ -94,6 +97,41 @@ export function AuthScreen({
           ))}
         </section>
       )}
+      <section className="mt-6 space-y-3" aria-labelledby={`${restoreId}-title`}>
+        <h2 id={`${restoreId}-title`} className="font-bold">Bring your progress</h2>
+        <p className="text-sm text-muted-foreground">
+          Already used MabatID on another device? Choose how to restore your
+          profile. You don’t need to create a new one first.
+        </p>
+        <div role="group" aria-label="Restore method" className="grid grid-cols-2 gap-3">
+          <Button
+            type="button"
+            variant={restoreMethod === "file" ? "brand" : "outline"}
+            size="lg"
+            aria-pressed={restoreMethod === "file"}
+            aria-controls={`${restoreId}-panel`}
+            onClick={() => setRestoreMethod("file")}
+            className="w-full whitespace-normal"
+          >
+            <FileUp className="size-4" aria-hidden="true" /> Import a file
+          </Button>
+          <Button
+            type="button"
+            variant={restoreMethod === "code" ? "brand" : "outline"}
+            size="lg"
+            aria-pressed={restoreMethod === "code"}
+            aria-controls={`${restoreId}-panel`}
+            onClick={() => setRestoreMethod("code")}
+            className="w-full whitespace-normal"
+          >
+            <KeyRound className="size-4" aria-hidden="true" /> Use a code
+          </Button>
+        </div>
+        <div id={`${restoreId}-panel`}>
+          {restoreMethod === "file" && <ProfileBackupRestore onImported={onDone} />}
+          {restoreMethod === "code" && <ProfileTransfers receiveOnly onImported={onDone} />}
+        </div>
+      </section>
       <form onSubmit={submit} className="mt-6 space-y-4">
         <h2 className="font-bold">Create a device profile</h2>
         <div className="space-y-2">
@@ -141,7 +179,6 @@ export function AuthScreen({
           Create device profile
         </Button>
       </form>
-      <div className="mt-8"><ProfileBackupRestore onImported={onDone} /></div>
     </main>
   );
 }

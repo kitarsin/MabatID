@@ -9,18 +9,23 @@ import { CODE_LENGTH, TransferError, createTransferCode, finishTransfer, formatC
 import { ImportReview } from "./ImportReview";
 
 const errorText = (e: unknown) => e instanceof Error ? e.message : "Could not complete this transfer.";
-export function TransferPanel({ controller }: { controller: BackupRestoreController }) {
+export interface TransferPanelProps {
+  controller: BackupRestoreController;
+  receiveOnly?: boolean;
+  onImported?: () => void;
+}
+export function TransferPanel({ controller, receiveOnly = false, onImported }: TransferPanelProps) {
   const [available, setAvailable] = useState<boolean | null>(null);
   useEffect(() => { let live = true; void transferAvailable().then((value) => { if (live) setAvailable(value); }); return () => { live = false; }; }, []);
-  return <section aria-label="Move to another device" className="space-y-4">
-    <h2 className="text-lg font-semibold tracking-tight text-navy">Move to another device</h2>
-    <p className="text-sm text-muted-foreground">Use a private, one-time code to copy a profile. This temporarily uploads an encrypted backup to our server and Supabase; our server can decrypt it. Codes expire after 10 minutes. There is no continuous synchronization. Anyone with the code can retrieve the backup, so share it privately.</p>
+  return <section aria-label={receiveOnly ? "Transfer with a code" : "Move to another device"} className="space-y-4">
+    <h2 className="text-lg font-semibold tracking-tight text-navy">{receiveOnly ? "Transfer with a code" : "Move to another device"}</h2>
+    <p className="text-sm text-muted-foreground">Use a private, one-time code to copy a profile. Code transfers temporarily store an encrypted backup on our server and Supabase; our server can decrypt it. Codes expire after 10 minutes. There is no continuous synchronization. Anyone with the code can retrieve the backup, so share it privately.</p>
     {available === null ? <p role="status" className="text-sm">Checking code transfers…</p> : !available ? <div className="space-y-2 rounded-2xl bg-muted p-4 text-sm">
-      <p role="status">Code transfers are unavailable right now. You can still use Backup &amp; restore above.</p>
+      <p role="status">Code transfers are unavailable right now. You can use a JSON backup instead.</p>
       <Button type="button" variant="outline" size="md" onClick={async () => { setAvailable(null); setAvailable(await transferAvailable()); }}>Check again</Button>
     </div> : <div className="space-y-4">
-      {controller.users.length > 0 && <SendCard controller={controller} />}
-      <ReceiveCard controller={controller} />
+      {!receiveOnly && controller.users.length > 0 && <SendCard controller={controller} />}
+      <ReceiveCard controller={controller} onImported={onImported} />
     </div>}
   </section>;
 }
@@ -79,7 +84,7 @@ interface Pending { code: string; claimToken: string; id?: string }
 function remember(pending: Pending) {
   try { sessionStorage.setItem(PENDING_KEY,JSON.stringify(pending)); } catch { throw new TransferError("storage"); }
 }
-function ReceiveCard({ controller }: { controller: BackupRestoreController }) {
+function ReceiveCard({ controller, onImported }: Pick<TransferPanelProps, "controller" | "onImported">) {
   const uid = useId();
   const [code, setCode] = useState("");
   const [pending, setPending] = useState<Pending | null>(null);
@@ -146,6 +151,7 @@ function ReceiveCard({ controller }: { controller: BackupRestoreController }) {
       const problem = await controller.commitBackup(preview,choice,{ ...options, receipt: claim.id });
       if (problem) { setError(problem); return; }
       durable = true; setSaved(true); setPreview(null);
+      onImported?.();
       await acknowledge(value);
     } catch (e) { setError(durable ? "Your profile is saved. Transfer completion could not be confirmed; use Finish transfer to retry without importing again." : errorText(e)); }
     finally { setBusy(false); }
@@ -164,4 +170,4 @@ function ReceiveCard({ controller }: { controller: BackupRestoreController }) {
     {status && <p role="status" className="text-sm font-semibold">{status}</p>}
   </div>;
 }
-export function ProfileTransfers() { return <TransferPanel controller={useStore()} />; }
+export function ProfileTransfers(props: Omit<TransferPanelProps, "controller">) { return <TransferPanel controller={useStore()} {...props} />; }

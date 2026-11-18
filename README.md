@@ -7,6 +7,8 @@ npm ci
 npm run dev
 ```
 
+Development and production builds use Webpack (`next dev --webpack` / `next build --webpack`). Tailwind CSS runs through PostCSS.
+
 Open the localhost URL printed by Next.js. Validation:
 
 ```sh
@@ -116,7 +118,7 @@ Server authentication and a persistent database remain future backend work. Befo
 
 ## Manual profile backup and restore
 
-Open **Settings → Backup & restore**, or **Open device profile → Backup & restore** before creating a profile. Select any saved profile and download its JSON backup. On the other browser/device, select that file, review its identity/content and differences, and import it. Selecting or canceling a file changes no saved data. Files are read locally; no backup service, login, email, transfer-code service, or cloud storage is involved. Backups contain personal information, are **not encrypted**, and do **not continuously synchronize** devices. Keep files private. Code-based device transfer is a separate, explicitly online option described below. Clearing browser storage still deletes local profiles and local undo data; keep a separate file backup.
+Open **Settings → Backup & restore**, or **Open device profile → Bring your progress → Import a file** before creating a profile. Select any saved profile and download its JSON backup. On the other browser/device, select that file, review its identity/content and differences, and import it. Selecting or canceling a file changes no saved data. Files are read locally; no backup service, login, email, transfer-code service, or cloud storage is involved. Backups contain personal information, are **not encrypted**, and do **not continuously synchronize** devices. Keep files private. Code-based device transfer is a separate, explicitly online option described below. Clearing browser storage still deletes local profiles and local undo data; keep a separate file backup.
 
 ### Format and validation
 
@@ -169,7 +171,7 @@ The `npm test` suite includes complete round trips, removals/corrections, mislea
 
 ## One-time device transfer codes
 
-Open **Settings → Move to another device**. Select any saved profile and choose **Make a code**, then enter the grouped 12-character code on another device and choose **Review transfer**. The recipient does not need a profile first. The same `ImportReview` component and repository preview/commit engine handle files and codes: identity checks, ancestry comparisons, detailed differences, sanitization acknowledgment, replace/keep-both decisions, explicit replacement confirmation, stale-target checks and persistent undo. **Keep current profile** finishes a transfer whose content is already identical, without creating a revision.
+Open **Settings → Move to another device**, or **Open device profile → Bring your progress → Use a code** to receive progress before creating a profile. Select any saved profile and choose **Make a code**, then enter the grouped 12-character code on another device and choose **Review transfer**. The recipient does not need a profile first. The same `ImportReview` component and repository preview/commit engine handle files and codes: identity checks, ancestry comparisons, detailed differences, sanitization acknowledgment, replace/keep-both decisions, explicit replacement confirmation, stale-target checks and persistent undo. **Keep current profile** finishes a transfer whose content is already identical, without creating a revision.
 
 Settings hosts `<ProfileBackupRestore />` and `<ProfileTransfers />` as separate sections; another client screen can render `<TransferPanel controller={controller} />` using the same store controller.
 
