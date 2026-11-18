@@ -7,10 +7,25 @@ import { CARD_BY_ID } from "@/data/cards";
  * Pure helpers only (no React, no window), so parsing and guards are easy to reason about.
  */
 
-export type View = "tree" | "browse" | "progress" | "auth" | "edit";
+export type View =
+  | "tree"
+  | "browse"
+  | "guide"
+  | "progress"
+  | "settings"
+  | "auth"
+  | "edit";
 export type Screen = "landing" | View;
 
-const VIEWS: readonly string[] = ["tree", "browse", "progress", "auth", "edit"];
+const VIEWS: readonly string[] = [
+  "tree",
+  "browse",
+  "guide",
+  "progress",
+  "settings",
+  "auth",
+  "edit",
+];
 
 export interface RawRoute {
   /** Recognised `v`, else null. */
@@ -42,14 +57,10 @@ export interface Route {
   canonical: string;
 }
 
-/** Applies the guards: progress needs an account (guests may edit their starting point), auth is pointless when signed in. */
+/** Applies the guards: auth is pointless when signed in. (Guests see a reduced Progress with suggestions.) */
 export function resolveRoute(raw: RawRoute, signedIn: boolean): Route {
   let view = raw.view;
   let fixed = raw.dirty;
-  if (view && !signedIn && view === "progress") {
-    view = "tree";
-    fixed = true;
-  }
   if (view === "auth" && signedIn) {
     view = "tree";
     fixed = true;

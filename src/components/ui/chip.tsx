@@ -4,10 +4,10 @@ import { cn } from "cn"
 type ChipTone = "outline" | "mist" | "have"
 
 const TONES: Record<ChipTone, string> = {
-  outline: "border-border bg-white text-navy hover:bg-mist",
-  mist: "border-transparent bg-mist text-navy hover:bg-sky",
+  outline: "border-navy/10 bg-white text-navy shadow-[0_1px_2px_rgb(27_54_93/0.06)] hover:border-navy/25",
+  mist: "border-transparent bg-mist/70 text-navy hover:bg-mist",
   /** Something the user already has. */
-  have: "border-amber bg-amber text-navy",
+  have: "border-amber bg-amber/90 text-navy",
 }
 
 /**
@@ -28,8 +28,8 @@ function Chip({
       data-slot="chip"
       aria-pressed={pressed}
       className={cn(
-        "inline-flex min-h-11 shrink-0 items-center justify-center gap-1 rounded-full border-2 px-3.5 text-sm font-semibold transition-[background-color,color,border-color,scale] duration-[var(--dur-fast)] ease-[var(--ease-out)] select-none active:scale-[0.97] active:duration-[var(--dur-press)] [&_svg]:shrink-0",
-        pressed ? "border-civic bg-civic text-white hover:bg-civic" : TONES[tone],
+        "inline-flex min-h-11 shrink-0 items-center justify-center gap-1.5 rounded-full border px-4 text-sm font-medium transition-[background-color,color,border-color,scale] duration-[var(--dur-fast)] ease-[var(--ease-out)] select-none active:scale-[0.97] active:duration-[var(--dur-press)] [&_svg]:shrink-0",
+        pressed ? "border-navy bg-navy text-white shadow-[0_6px_14px_-8px_rgb(27_54_93/0.7)] hover:bg-navy" : TONES[tone],
         className
       )}
       {...props}

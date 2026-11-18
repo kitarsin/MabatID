@@ -15,9 +15,11 @@ export function FactQuestions({
   return (
     <div className="space-y-3">
       {[...new Set(ids)].map((id) => (
-        <fieldset key={id} className="rounded-xl border border-border p-3">
-          <legend className="px-1 text-sm font-semibold">{FACTS[id]}</legend>
-          <div className="flex flex-wrap gap-2">
+        <fieldset key={id} className="rounded-[20px] bg-white p-4 ring-1 ring-navy/[0.08]">
+          <legend className="float-left mb-3 w-full text-sm leading-relaxed font-medium text-navy">
+            {FACTS[id]}
+          </legend>
+          <div className="clear-both flex flex-wrap gap-2">
             {[
               { label: "Yes", value: true },
               { label: "No", value: false },

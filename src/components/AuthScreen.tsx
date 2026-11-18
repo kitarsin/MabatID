@@ -116,8 +116,8 @@ export function AuthScreen({
             aria-describedby={describedBy("age", "age-hint")}
           />
           <p id="age-hint" className="text-xs text-muted-foreground">
-            For a child, enter the child’s age. Update it under Progress → Edit
-            when it changes.
+            For a child, enter the child’s age. You can change it later in
+            Settings.
           </p>
         </div>
         {error && (

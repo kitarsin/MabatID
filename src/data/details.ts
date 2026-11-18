@@ -22,6 +22,8 @@ export interface PrepItem {
   confirm?: boolean;
   subject?: "self" | "child" | "guardian";
   when?: Condition;
+  /** Plain label for a case-by-case requirement, e.g. "If your barangay asks". */
+  onlyIf?: string;
   route?: "onsite" | "online";
   completedBy?: string;
   documentChecks?: Record<string, DocumentCheck[]>;
@@ -120,27 +122,48 @@ export const DETAILS: Record<string, CardDetail> = {
       fee: "**₱155** on-site · **₱365** online (with delivery)",
       prepare: [
         {
-          id: "photo-id",
-          t: "**1 original valid photo ID**",
-          ids: ["postal", "philsys", "passport", "lto", "prc"],
-          route: "onsite",
-        },
-        {
-          id: "online-photo-id",
-          t: "**1 PSAHelpline-accepted original ID**. A Barangay ID must bear **both a photo and signature**.",
-          route: "online",
-          ids: [
-            "postal",
-            "philsys",
-            "passport",
-            "lto",
-            "prc",
-            "umid",
-            "barangay-id",
+          id: "requester",
+          either: [
+            {
+              id: "own-id",
+              label: "I have my own valid ID",
+              items: [
+              {
+                id: "photo-id",
+                t: "**1 original valid photo ID**",
+                ids: ["postal", "philsys", "passport", "lto", "prc"],
+                route: "onsite",
+              },
+              {
+                id: "online-photo-id",
+                t: "**1 PSAHelpline-accepted original ID**. A Barangay ID must bear **both a photo and signature**.",
+                route: "online",
+                ids: [
+                  "postal",
+                  "philsys",
+                  "passport",
+                  "lto",
+                  "prc",
+                  "umid",
+                  "barangay-id",
+                ],
+                documentChecks: {
+                  "barangay-id": ["photoSignature"],
+                },
+              },
+              ],
+            },
+            {
+              id: "family",
+              label: "A family member requests it for me",
+              items: [
+                {
+                  id: "family-request",
+                  t: "**A parent, spouse, child or legal guardian** requests it with **their own valid ID**. Anyone else needs your **authorization letter** and both IDs.",
+                },
+              ],
+            },
           ],
-          documentChecks: {
-            "barangay-id": ["photoSignature"],
-          },
         },
         {
           id: "appointment",
@@ -159,7 +182,7 @@ export const DETAILS: Record<string, CardDetail> = {
       onsite: [
         {
           id: "onsite:book-appointment",
-          t: "Book a free appointment and pick a **PSA CRS outlet**.",
+          t: "Book a free appointment online and pick the **PSA Civil Registry System (CRS) outlet** nearest you.",
           link: {
             label: "PSA CRS appointment",
             url: "https://crs.psa.gov.ph",
@@ -167,26 +190,26 @@ export const DETAILS: Record<string, CardDetail> = {
         },
         {
           id: "onsite:attend",
-          t: "Arrive **30 minutes early** and show your slip.",
+          t: "Go to that outlet **30 minutes before** your time. Bring your appointment slip and **1 valid ID**.",
           requiresPreparation: true,
         },
         {
           id: "onsite:complete-form",
-          t: "Fill out the application form and get a queue number.",
+          t: "Get the **Birth Certificate request form** at the information desk, fill it in, and take a queue number.",
         },
         {
           id: "onsite:submit-pay",
-          t: "Submit form, ID and **₱155** at the window.",
+          t: "When your number is called, hand in the form and your ID at the window and pay **₱155 per copy**.",
         },
         {
           id: "onsite:collect",
-          t: "Claim your copy and **check every detail**.",
+          t: "Wait at the releasing area (usually **1–2 hours**). Check your name, birth date and parents’ names before you leave.",
         },
       ],
       online: [
         {
           id: "online:order",
-          t: "Choose **Birth Certificate** and enter your birth details.",
+          t: "Go to **PSA Helpline**, choose **Birth Certificate**, and type your details exactly as they appear on your record.",
           link: {
             label: "PSAHelpline.ph",
             url: "https://psahelpline.ph/psa-birth-certificate",
@@ -194,16 +217,16 @@ export const DETAILS: Record<string, CardDetail> = {
         },
         {
           id: "online:delivery-details",
-          t: "Add your delivery address and contact number.",
+          t: "Enter the address where it should be delivered and a mobile number the courier can call.",
         },
         {
           id: "online:pay",
-          t: "Pay **₱365** via GCash, Maya, card or bank.",
+          t: "Pay **₱365 per copy** (delivery included) by GCash, Maya, card or over the counter.",
           requiresPreparation: true,
         },
         {
           id: "online:receive",
-          t: "Receive it from the courier — show your **original ID**.",
+          t: "The courier arrives in about **3–8 working days**. You must receive it yourself and show a **valid ID**.",
         },
       ],
     },
@@ -238,11 +261,12 @@ export const DETAILS: Record<string, CardDetail> = {
         },
         {
           id: "residency",
-          t: "**Proof of residency** — utility bill, lease or landlord note",
+          t: "**Proof you live there** — utility bill, lease or landlord note. Some barangays just check their resident list.",
         },
         {
           id: "cedula",
-          t: "Cedula, **only if** your barangay requires it",
+          t: "**Cedula** (Community Tax Certificate)",
+          onlyIf: "If your barangay asks",
           ids: ["cedula"],
           when: {
             fact: "needsCedula",
@@ -250,7 +274,8 @@ export const DETAILS: Record<string, CardDetail> = {
         },
         {
           id: "jobseeker-oath",
-          t: "Jobseeker: signed **Oath of Undertaking**, 6+ months residency",
+          t: "**Signed Oath of Undertaking** — you must have lived there **6+ months**",
+          onlyIf: "If you’re a first-time jobseeker",
           when: {
             fact: "waiverRequested",
           },
@@ -262,30 +287,30 @@ export const DETAILS: Record<string, CardDetail> = {
       onsite: [
         {
           id: "onsite:visit",
-          t: "Go to the Barangay Hall of your **actual address**.",
+          t: "Go to the **Barangay Hall where you live now**, on a weekday during office hours.",
         },
         {
           id: "onsite:present-documents",
-          t: "Show your ID and proof of residency; state your purpose.",
+          t: "At the front desk, say you need a **Barangay Clearance** (or Certificate of Residency) and what it’s for — e.g. a job, NBI or Postal ID. Show **1 valid ID**.",
           requiresPreparation: true,
         },
         {
           id: "onsite:complete-form",
-          t: "Fill out the request form (and the **Oath** if jobseeker).",
+          t: "Fill in the request form. **First-time jobseekers** also sign the **Oath of Undertaking** so it’s free.",
         },
         {
           id: "onsite:pay",
-          t: "Pay at the treasurer’s desk — **₱0** if exempt.",
+          t: "Pay the barangay treasurer (usually **₱20–₱100**, **free** for first-time jobseekers) and keep the receipt.",
         },
         {
           id: "onsite:collect",
-          t: "Claim your **dry-sealed** certificate and check the spelling.",
+          t: "Wait while it’s printed and signed — usually **the same day**. Check the spelling and the **dry seal**.",
         },
       ],
       online: [
         {
           id: "online:check-availability",
-          t: "Check if your LGU supports online requests.",
+          t: "Ask your barangay or check its city’s official page if it takes **online requests**. If not, use **In person**.",
           link: {
             label: "eGovPH",
             url: "https://e.gov.ph",
@@ -293,16 +318,16 @@ export const DETAILS: Record<string, CardDetail> = {
         },
         {
           id: "online:submit-request",
-          t: "Fill out the digital form and upload your ID and proof of residency.",
+          t: "Fill in the online form and upload a photo of your **valid ID** and **proof that you live there**.",
           requiresPreparation: true,
         },
         {
           id: "online:pay",
-          t: "Pay online or at the hall.",
+          t: "Pay through the barangay’s online payment option, or at the Barangay Hall.",
         },
         {
           id: "online:collect",
-          t: "Download the e-clearance or claim the physical copy.",
+          t: "Download the e-clearance if offered — or claim the printed copy at the Barangay Hall.",
         },
       ],
     },
@@ -347,7 +372,8 @@ export const DETAILS: Record<string, CardDetail> = {
         },
         {
           id: "income",
-          t: "**Proof of income** if you earn (BIR 2316, payslip, ITR)",
+          t: "**Proof of income** — payslip, BIR 2316 or ITR",
+          onlyIf: "If you earn income",
           when: {
             fact: "employed",
           },
@@ -359,24 +385,24 @@ export const DETAILS: Record<string, CardDetail> = {
       onsite: [
         {
           id: "onsite:visit",
-          t: "Go to the **Treasurer’s Office** or authorized barangay desk.",
+          t: "Go to the **Treasurer’s Office at your City or Municipal Hall** (some Barangay Halls also issue cedulas).",
         },
         {
           id: "onsite:complete-form",
-          t: "Fill out the **Community Tax Declaration Form**.",
+          t: "Ask for the **Community Tax Certificate** form. Fill in your name, address, birth date, work and yearly income.",
         },
         {
           id: "onsite:submit",
-          t: "Submit it with your ID and proof of income.",
+          t: "Hand it in with **1 valid ID**. If you earn money, bring a payslip or ITR so they can compute the tax.",
           requiresPreparation: true,
         },
         {
           id: "onsite:pay",
-          t: "Pay the assessed tax (**₱5** if no income).",
+          t: "Pay the tax: **₱5** basic, plus **₱1 for every ₱1,000** you earn in a year.",
         },
         {
           id: "onsite:receive",
-          t: "Sign and thumbmark the cedula — released **same day**.",
+          t: "Sign it and add your **thumbmark**. You get your cedula **right away**.",
         },
       ],
       online: [],
@@ -420,7 +446,8 @@ export const DETAILS: Record<string, CardDetail> = {
         },
         {
           id: "loss-affidavit",
-          t: "Lost ID? A **notarized Affidavit of Loss**",
+          t: "**Notarized Affidavit of Loss**",
+          onlyIf: "If replacing a lost ID",
           when: {
             fact: "replacement",
           },
@@ -432,23 +459,23 @@ export const DETAILS: Record<string, CardDetail> = {
       onsite: [
         {
           id: "onsite:enroll",
-          t: "Enroll and get your **Certificate of Matriculation**.",
+          t: "Enroll for the term and keep your **Certificate of Registration** (proof you’re enrolled).",
         },
         {
           id: "onsite:visit",
-          t: "Go to your school’s **Student Affairs Office**.",
+          t: "Go to the office that makes IDs — usually the **Registrar** or **Student Affairs Office**.",
         },
         {
           id: "onsite:apply",
-          t: "Fill out the ID application form.",
+          t: "Fill in the **ID application form** they give you.",
         },
         {
           id: "onsite:capture",
-          t: "Have your **photo and signature** captured.",
+          t: "Have your **photo and signature** taken at the ID station.",
         },
         {
           id: "onsite:collect",
-          t: "Claim your ID — for a lost ID, bring the affidavit and pay the **reprint fee**.",
+          t: "Claim your ID on the release date. **Lost ID?** Bring an affidavit of loss and pay the replacement fee.",
           requiresPreparation: true,
         },
       ],
@@ -548,25 +575,25 @@ export const DETAILS: Record<string, CardDetail> = {
       prepare: [
         {
           id: "application-form-onsite",
-          t: "**Accomplished Barangay ID form** — name, birth date, civil status, address and emergency contact; blood type if requested by the local form",
+          t: "**Barangay ID form** — name, birth date, civil status, address and emergency contact",
           route: "onsite",
           completedBy: "onsite:visit-fill-form",
         },
         {
           id: "application-form-online",
-          t: "**Completed online resident/Barangay ID application details** on your own LGU’s official portal",
+          t: "**Online Barangay ID form** on your city or barangay’s official site",
           route: "online",
           completedBy: "online:open-fill-form",
         },
         {
           id: "residency",
-          t: "**1 locally accepted proof of residency** — Barangay Clearance/Certificate of Residency, utility bill, lease, or voter registration record showing your barangay address. A shared bill needs the locally required endorsement/lease.",
+          t: "**1 proof you live there** — Barangay Certificate of Residency, utility bill, lease or voter record. Shared bill? Bring the owner’s endorsement.",
           ids: ["barangay", "utility-bill", "lease-contract", "voter-record"],
           confirm: true,
         },
         {
           id: "identity",
-          t: "**1 accepted proof of identity** — PSA/LCRO Birth Certificate, current School/Company ID, or an accepted existing government ID",
+          t: "**1 proof of identity** — PSA or local birth certificate, School/Company ID, or a government ID",
           ids: [
             "psa",
             "lcro-birth",
@@ -584,7 +611,8 @@ export const DETAILS: Record<string, CardDetail> = {
         },
         {
           id: "cedula",
-          t: "**Current-year Cedula**, only for an adult applicant when required by the barangay",
+          t: "**Current-year Cedula**",
+          onlyIf: "If your barangay asks (adults)",
           ids: ["cedula"],
           when: {
             all: [
@@ -601,7 +629,8 @@ export const DETAILS: Record<string, CardDetail> = {
         },
         {
           id: "printed-photos",
-          t: "**1–2 recent colored ID photos**, 1×1 or 2×2 on white background as specified locally, when no live photo capture is available",
+          t: "**1–2 recent colored ID photos** (1×1 or 2×2, white background)",
+          onlyIf: "If they don’t take photos there",
           route: "onsite",
           when: {
             not: {
@@ -611,12 +640,13 @@ export const DETAILS: Record<string, CardDetail> = {
         },
         {
           id: "digital-photo",
-          t: "**Digital photo and clear document scans** in the formats requested by the official LGU portal",
+          t: "**Digital photo and clear scans** of your documents",
           route: "online",
         },
         {
           id: "guardian-id",
-          t: "**Parent/legal guardian’s valid ID** and any required relationship evidence",
+          t: "**Your parent or guardian’s valid ID**, plus proof you’re related if asked",
+          onlyIf: "If you’re under 18",
           subject: "guardian",
           when: {
             underAge: 18,
@@ -624,21 +654,24 @@ export const DETAILS: Record<string, CardDetail> = {
         },
         {
           id: "guardian-consent",
-          t: "**Written parental/guardian consent** and accompanying guardian where required locally",
+          t: "**Written consent** from your parent or guardian, who usually comes with you",
+          onlyIf: "If you’re under 18",
           when: {
             underAge: 18,
           },
         },
         {
           id: "loss-evidence",
-          t: "**Loss/damage documentation** — local certification or affidavit, as required by the issuing barangay",
+          t: "**Proof of loss or damage** — barangay certification or affidavit of loss",
+          onlyIf: "If replacing a lost or damaged card",
           when: {
             fact: "barangayIdReplacement",
           },
         },
         {
           id: "waiver-evidence",
-          t: "**Local fee-waiver confirmation** and any supporting certificate/oath requested by the barangay for this physical card",
+          t: "**Fee-waiver confirmation** and any certificate the barangay asks for",
+          onlyIf: "If your barangay waives the fee",
           when: {
             fact: "barangayIdFeeWaived",
           },
@@ -651,39 +684,39 @@ export const DETAILS: Record<string, CardDetail> = {
       onsite: [
         {
           id: "onsite:visit-fill-form",
-          t: "Visit your actual Barangay Hall, confirm your RBI/purok resident record, request the physical **Barangay ID** form and complete the required details.",
+          t: "Go to the **Barangay Hall where you live**. Ask for the **Barangay ID form** — they’ll check you’re listed as a resident.",
         },
         {
           id: "onsite:submit",
-          t: "Submit the completed form with identity and residency evidence, adult Cedula only if required, and photos or guardian documents as applicable.",
+          t: "Hand in the form with **1 valid ID or your birth certificate** and **proof you live there**. Some barangays also ask for a **cedula** or a **1x1 photo**.",
           requiresPreparation: true,
         },
         {
           id: "onsite:verify-capture-sign",
-          t: "Complete residency/blotter verification, have your photo captured if supported, and affix your **specimen signature**. Confirm the card will bear both photo and signature.",
+          t: "Have your **photo** taken and sign your **specimen signature**. Make sure the card will show **both** — other offices need them.",
         },
         {
           id: "onsite:pay-receipt",
-          t: "Pay the locally assessed fee at the barangay cashier and keep your **Official Receipt**, or present the confirmed local fee-waiver evidence.",
+          t: "Pay the barangay cashier (often **₱20–₱150**) and keep the **official receipt**.",
         },
         {
           id: "onsite:collect",
-          t: "Claim the laminated/PVC card on the confirmed release date. Check your name, address, photo, signature and printed validity dates.",
+          t: "Claim the card on the date they give you. Check your **name, address, photo and expiry date**.",
         },
       ],
       online: [
         {
           id: "online:open-fill-form",
-          t: "After your barangay confirms online service is available, open its official LGU portal and complete the resident/Barangay ID application. Ask the Barangay Hall for the correct portal.",
+          t: "Ask your Barangay Hall if it has an **online form** and which website to use. Open it and fill in your details.",
         },
         {
           id: "online:upload-submit",
-          t: "Upload the required residency and identity evidence, digital photo and any applicable guardian documents, then submit the application.",
+          t: "Upload your **valid ID**, **proof you live there** and a **digital photo**, then submit.",
           requiresPreparation: true,
         },
         {
           id: "online:pay-collect",
-          t: "Pay through the approved channel or barangay cashier, retain the receipt, and claim the physical card at the hall (or use confirmed LGU delivery). Check the photo, signature, address and validity dates.",
+          t: "Pay online or at the barangay cashier, then **claim the card at the Barangay Hall**. Check your photo, signature and address.",
         },
       ],
     },
@@ -741,30 +774,30 @@ export const DETAILS: Record<string, CardDetail> = {
       onsite: [
         {
           id: "onsite:visit",
-          t: "Go to a **PhilHealth LHIO / Express** office and get a queue number.",
+          t: "Go to any **PhilHealth office (LHIO)** or **PhilHealth Express** outlet and take a queue number.",
         },
         {
           id: "onsite:complete-pmrf",
-          t: "Fill out **2 copies** of the PMRF.",
+          t: "Fill in **2 copies** of the **PhilHealth Member Registration Form (PMRF)** — free at the office.",
         },
         {
           id: "onsite:submit",
-          t: "Submit the PMRF, birth certificate or ID, and photos.",
+          t: "Hand in the PMRF with your **PSA birth certificate or 1 valid ID** and a **1x1 photo**.",
           requiresPreparation: true,
         },
         {
           id: "onsite:encoding",
-          t: "Wait for encoding (**15–60 minutes**).",
+          t: "Wait while they register you (**15–60 minutes**). You’ll get your **12-digit PhilHealth number (PIN)**.",
         },
         {
           id: "onsite:collect",
-          t: "Claim your **PhilHealth ID** on the spot.",
+          t: "Claim your **PhilHealth ID card** at the same counter.",
         },
       ],
       online: [
         {
           id: "online:register",
-          t: "Open the Member Portal and choose **Member Registration**.",
+          t: "Open the **PhilHealth Member Portal** and choose **Member Registration**.",
           link: {
             label: "PhilHealth Member Portal",
             url: "https://memberinquiry.philhealth.gov.ph/member/",
@@ -772,16 +805,16 @@ export const DETAILS: Record<string, CardDetail> = {
         },
         {
           id: "online:submit-pmrf",
-          t: "Complete the PMRF fields and upload your documents.",
+          t: "Fill in the form online and upload your **birth certificate or valid ID**.",
           requiresPreparation: true,
         },
         {
           id: "online:receive-pin",
-          t: "Wait **1–5 working days** for your 12-digit **PIN** by email.",
+          t: "Wait **1–5 working days**. Your **12-digit PIN** arrives by email.",
         },
         {
           id: "online:collect",
-          t: "Claim your **PhilHealth ID** at any LHIO with your PIN, 1 valid ID and a 1x1 photo.",
+          t: "Go to **any PhilHealth office** with your PIN, **1 valid ID** and a **1x1 photo** to get the card.",
         },
       ],
     },
@@ -846,7 +879,8 @@ export const DETAILS: Record<string, CardDetail> = {
         },
         {
           id: "jobseeker-certificate",
-          t: "Jobseeker: **Barangay Certification**",
+          t: "**First-Time Jobseeker certificate** from your barangay",
+          onlyIf: "If you’re a first-time jobseeker",
           ids: ["jobseeker:barangay"],
           when: {
             fact: "jobseekerApplication",
@@ -859,30 +893,30 @@ export const DETAILS: Record<string, CardDetail> = {
       onsite: [
         {
           id: "onsite:find-rdo",
-          t: "Find the **RDO** covering your address (or your employer’s).",
+          t: "Find the **BIR Revenue District Office (RDO)** for your home address — or your employer’s, if you’re employed.",
         },
         {
           id: "onsite:complete-form",
-          t: "Fill out **2 copies** of BIR Form 1904 / 1902.",
+          t: "Fill in **2 copies** of **BIR Form 1904** (no job yet) or **1902** (employee — your employer often files this for you).",
         },
         {
           id: "onsite:submit",
-          t: "Submit with your ID, proof of address and a 1x1 photo.",
+          t: "Hand them in at the RDO’s **registration counter** with **1 valid ID**, proof of address and a **1x1 photo**.",
           requiresPreparation: true,
         },
         {
           id: "onsite:verification",
-          t: "Wait for verification (**30 min – 2 hours**).",
+          t: "Wait while they check and encode your details (**30 minutes – 2 hours**).",
         },
         {
           id: "onsite:receive-tin",
-          t: "Get your stamped form with your **9-digit TIN**.",
+          t: "You get your **9-digit TIN** on the stamped form. You can then get the **Digital TIN ID** online.",
         },
       ],
       online: [
         {
           id: "online:register",
-          t: "Open ORUS → **New Registration → Individual**.",
+          t: "Open **BIR ORUS** and choose **New Registration → Individual**.",
           link: {
             label: "BIR ORUS",
             url: "https://orus.bir.gov.ph",
@@ -890,20 +924,20 @@ export const DETAILS: Record<string, CardDetail> = {
         },
         {
           id: "online:complete-form",
-          t: "Verify your email, then complete **Form 1904/1902**.",
+          t: "Confirm your email, then fill in **Form 1904** or **1902** online.",
         },
         {
           id: "online:upload",
-          t: "Upload your ID and a **selfie holding it**.",
+          t: "Upload a photo of your **valid ID** and a **selfie holding that ID**.",
           requiresPreparation: true,
         },
         {
           id: "online:approval",
-          t: "Wait **1–3 working days** for approval.",
+          t: "Wait **1–3 working days** for an approval email.",
         },
         {
           id: "online:download",
-          t: "Download your **Digital TIN ID** (PDF or eGovPH app).",
+          t: "Log in again and download your **Digital TIN ID** (also shown in the **eGovPH app**).",
         },
       ],
     },
@@ -984,7 +1018,8 @@ export const DETAILS: Record<string, CardDetail> = {
         },
         {
           id: "jobseeker-documents",
-          t: "Jobseeker: **Barangay Certification** + Oath",
+          t: "**First-Time Jobseeker certificate** + signed Oath",
+          onlyIf: "If you’re a first-time jobseeker",
           ids: ["jobseeker:barangay"],
           when: {
             fact: "waiverRequested",
@@ -998,26 +1033,26 @@ export const DETAILS: Record<string, CardDetail> = {
       onsite: [
         {
           id: "onsite:attend",
-          t: "Arrive at your chosen NBI branch **on your appointment date**.",
+          t: "Go to your NBI branch **on your appointment date**, a little early.",
           requiresPreparation: true,
         },
         {
           id: "onsite:present-documents",
-          t: "Show your reference number, receipt and **2 IDs**.",
+          t: "Show your **reference number**, receipt and **2 valid IDs** at the entrance.",
         },
         {
           id: "onsite:biometrics",
-          t: "Have your photo, fingerprints and signature captured.",
+          t: "Have your **photo, fingerprints and signature** taken.",
         },
         {
           id: "onsite:release",
-          t: "No “hit”: released **same day**. With a “hit”: return in **5–10 working days**.",
+          t: "No “hit” (no name match): you get it **the same day**. With a hit: come back in **5–10 working days**.",
         },
       ],
       online: [
         {
           id: "online:register",
-          t: "Register an account and verify your mobile number.",
+          t: "Create an account on the **NBI Clearance website** and verify your mobile number.",
           link: {
             label: "NBI Clearance",
             url: "https://clearance.nbi.gov.ph",
@@ -1025,15 +1060,15 @@ export const DETAILS: Record<string, CardDetail> = {
         },
         {
           id: "online:apply",
-          t: "Complete your profile and click **Apply for Clearance**.",
+          t: "Fill in your profile, then click **Apply for Clearance** and choose your purpose.",
         },
         {
           id: "online:book",
-          t: "Pick a branch, date and time.",
+          t: "Pick the **NBI branch** nearest you, a date and a time slot.",
         },
         {
           id: "online:pay",
-          t: "Pay **₱155** (or choose jobseeker for **₱0**).",
+          t: "Pay **₱155** using an option on the site (GCash, Maya, bank, 7-Eleven). **First-time jobseekers pay ₱0.**",
           link: {
             label: "First-time jobseeker NBI",
             url: "https://firsttimejobseekers.nbi.gov.ph",
@@ -1041,7 +1076,7 @@ export const DETAILS: Record<string, CardDetail> = {
         },
         {
           id: "online:save-reference",
-          t: "Save your **reference number** and receipt.",
+          t: "Save or screenshot your **reference number** and payment receipt.",
         },
       ],
     },
@@ -1093,7 +1128,8 @@ export const DETAILS: Record<string, CardDetail> = {
         },
         {
           id: "jobseeker-documents",
-          t: "Jobseeker: **Barangay Certification** + Oath",
+          t: "**First-Time Jobseeker certificate** + signed Oath",
+          onlyIf: "If you’re a first-time jobseeker",
           ids: ["jobseeker:barangay"],
           when: {
             fact: "waiverRequested",
@@ -1108,26 +1144,26 @@ export const DETAILS: Record<string, CardDetail> = {
       onsite: [
         {
           id: "onsite:attend",
-          t: "Go to your station **15–30 minutes early** (decent attire).",
+          t: "Go to that police station **15–30 minutes early**, in neat clothes (no sleeveless tops).",
           requiresPreparation: true,
         },
         {
           id: "onsite:present-documents",
-          t: "Show your reference number, receipt and **2 IDs**.",
+          t: "Show your **reference number**, receipt and **2 valid IDs** at the clearance desk.",
         },
         {
           id: "onsite:biometrics",
-          t: "Biometrics: photo, fingerprints, signature.",
+          t: "Have your **photo, fingerprints and signature** taken.",
         },
         {
           id: "onsite:release",
-          t: "Clean record: **same day**. With a “hit”: return in **5–15 working days**.",
+          t: "Clean record: you get it **the same day**. With a “hit”: come back in **5–15 working days**.",
         },
       ],
       online: [
         {
           id: "online:register",
-          t: "Register and verify your email.",
+          t: "Create an account on the **PNP Police Clearance website** and verify your email.",
           link: {
             label: "PNP NPCS",
             url: "https://pnpclearance.ph",
@@ -1135,19 +1171,19 @@ export const DETAILS: Record<string, CardDetail> = {
         },
         {
           id: "online:profile",
-          t: "Complete your applicant profile.",
+          t: "Fill in your profile exactly as it appears on your ID.",
         },
         {
           id: "online:book",
-          t: "Choose purpose, police station, date and time.",
+          t: "Choose your purpose, the **police station** nearest you, a date and a time.",
         },
         {
           id: "online:pay",
-          t: "Pay **₱150 + fee** — or jobseeker for **₱0**.",
+          t: "Pay **₱150 + service fee** with the options shown. **First-time jobseekers pay ₱0.**",
         },
         {
           id: "online:save-reference",
-          t: "Save your **reference number**.",
+          t: "Save or screenshot your **reference number**.",
         },
       ],
     },
@@ -1199,7 +1235,7 @@ export const DETAILS: Record<string, CardDetail> = {
       onsite: [
         {
           id: "onsite:check-status",
-          t: "Check your voter status online first.",
+          t: "Check that you’re a **registered voter** using the COMELEC Precinct Finder.",
           link: {
             label: "Precinct Finder",
             url: "https://precinctfinder.comelec.gov.ph",
@@ -1207,20 +1243,20 @@ export const DETAILS: Record<string, CardDetail> = {
         },
         {
           id: "onsite:visit",
-          t: "Visit your local **COMELEC office** (Intramuros main office if it’s for a **passport**).",
+          t: "Go to the **COMELEC Election Officer’s office** in your city or town (usually at the City/Municipal Hall).",
         },
         {
           id: "onsite:apply",
-          t: "Fill out the Voter’s Certification request form.",
+          t: "Ask for a **Voter’s Certification** and fill in the request form. Bring **1 valid ID**.",
           requiresPreparation: true,
         },
         {
           id: "onsite:pay",
-          t: "Pay **₱75** and keep the receipt.",
+          t: "Pay **₱75** at the cashier and keep the receipt.",
         },
         {
           id: "onsite:collect",
-          t: "Wait for the **dry-seal** — usually same day.",
+          t: "Wait for it to be printed and **dry-sealed** — usually **the same day**.",
         },
       ],
       online: [],
@@ -1229,13 +1265,13 @@ export const DETAILS: Record<string, CardDetail> = {
 
   postal: {
     procedure: "alternative",
-    onlineRequiresVisit: true,
+    onlineRequiresVisit: false,
     purpose:
       "Affordable government photo ID with fingerprint capture, widely accepted.",
     issuedBy: "Philippine Postal Corporation (PHLPost)",
     fee: { min: 550, max: 550 },
     onsite: true,
-    online: true,
+    online: false,
     refs: [
       {
         label: "Postal ID requirements",
@@ -1283,57 +1319,31 @@ export const DETAILS: Record<string, CardDetail> = {
       onsite: [
         {
           id: "onsite:prepare-forms",
-          t: "Download the form, find a capture station.",
+          t: "Download the **Postal ID application form** (or get it free at the post office) and fill in **2 copies**. Then find a **post office that takes Postal ID photos and fingerprints** — not every branch does, so call or check the list first.",
           link: {
-            label: "Postal ID info",
+            label: "Get the form and branch list",
             url: "https://www.postalidph.com/requirements.html",
           },
         },
         {
           id: "onsite:submit",
-          t: "Submit **2 forms** with ID and address proof.",
+          t: "At that post office’s **Postal ID counter**, hand in both forms, **1 proof of identity** and **1 proof of address** (original + photocopy).",
           requiresPreparation: true,
         },
         {
           id: "onsite:pay",
-          t: "Pay **₱550** (regular) or **₱650** (rush).",
+          t: "Pay at the cashier: **₱550** regular or **₱650** rush. Keep the receipt.",
         },
         {
           id: "onsite:biometrics",
-          t: "Photo, fingerprint and signature capture.",
+          t: "At the same counter, have your **photo, fingerprints and signature** taken.",
         },
         {
           id: "onsite:delivery",
-          t: "Delivery: **3–5 days** rush · **15–30 days** regular.",
+          t: "Your Postal ID is **mailed to your address**: **15–30 days** regular, **3–5 days** rush. Keep your receipt to follow up.",
         },
       ],
-      online: [
-        {
-          id: "online:preregister",
-          t: "Pre-register where available; **capture is still in person**.",
-          link: {
-            label: "PHLPost",
-            url: "https://phlpost.gov.ph",
-          },
-        },
-        {
-          id: "online:submit",
-          t: "Submit **2 forms** with ID and address proof.",
-          requiresPreparation: true,
-        },
-        {
-          id: "online:pay",
-          t: "Pay **₱550** (regular) or **₱650** (rush).",
-        },
-        {
-          id: "online:biometrics",
-          t: "Photo, fingerprint and signature capture.",
-        },
-        {
-          id: "online:delivery",
-          t: "Delivery: **3–5 days** rush · **15–30 days** regular.",
-        },
-      ],
+      online: [],
     },
   },
 
@@ -1432,7 +1442,7 @@ export const DETAILS: Record<string, CardDetail> = {
       onsite: [
         {
           id: "onsite:find-center",
-          t: "Find an open **PhilSys registration center**.",
+          t: "Find a **PhilSys registration center** — usually at your City/Municipal Hall, a mall or a PSA office. Check your LGU’s page for the schedule.",
           link: {
             label: "Supporting documents",
             url: "https://philsys.gov.ph/supporting-documents/",
@@ -1440,20 +1450,20 @@ export const DETAILS: Record<string, CardDetail> = {
         },
         {
           id: "onsite:screening",
-          t: "Present your documents for screening.",
+          t: "Show your **PSA birth certificate** or **1 valid ID** at the screening desk.",
           requiresPreparation: true,
         },
         {
           id: "onsite:verify-details",
-          t: "Check your encoded details **carefully**.",
+          t: "Check the details they typed — **name, birth date, address** — before you confirm.",
         },
         {
           id: "onsite:biometrics",
-          t: "Biometrics: photo, 10 fingerprints, iris scan.",
+          t: "Have your **photo, 10 fingerprints and iris** scanned.",
         },
         {
           id: "onsite:keep-trn",
-          t: "Keep your **TRN slip** to claim your ID.",
+          t: "Keep your **Transaction Reference Number (TRN)** slip. The card is mailed to you; you can use the **digital National ID** in the eGovPH app while you wait.",
         },
       ],
       online: [],
@@ -1527,7 +1537,8 @@ export const DETAILS: Record<string, CardDetail> = {
                 },
                 {
                   id: "student-registration",
-                  t: "**Certificate of Registration** for an adult student, with the current School ID. Confirm the required school validation with the passport office.",
+                  t: "**Certificate of Registration** from your school, with your School ID",
+                  onlyIf: "If you’re 18 or older",
                   when: { not: { underAge: 18 } },
                   confirm: true,
                 },
@@ -1548,30 +1559,30 @@ export const DETAILS: Record<string, CardDetail> = {
       onsite: [
         {
           id: "onsite:attend",
-          t: "Arrive **30 minutes early** with your printed packet.",
+          t: "Go to the DFA office you chose **30 minutes early**. Bring the packet, your **PSA birth certificate** and **1 valid ID** (originals + photocopies).",
           requiresPreparation: true,
         },
         {
           id: "onsite:verification",
-          t: "Submit documents at the verification counter.",
+          t: "Hand your documents to the **verification counter**.",
         },
         {
           id: "onsite:biometrics",
-          t: "Check encoded details, then biometrics.",
+          t: "Check your details on screen, then have your **photo, fingerprints and signature** taken.",
         },
         {
           id: "onsite:keep-receipt",
-          t: "Keep your receipt and **pick-up date**.",
+          t: "Keep your **official receipt** — it shows your **release date**.",
         },
         {
           id: "onsite:collect",
-          t: "Claim in **5–12 working days**.",
+          t: "Claim your passport at the same office on that date (see the date on your receipt), or have it delivered.",
         },
       ],
       online: [
         {
           id: "online:book",
-          t: "Book on the **official DFA site only**.",
+          t: "Book an appointment on the **official DFA passport site only** — never through fixers.",
           link: {
             label: "DFA appointment",
             url: "https://www.passport.gov.ph",
@@ -1579,15 +1590,15 @@ export const DETAILS: Record<string, CardDetail> = {
         },
         {
           id: "online:complete-form",
-          t: "Fill out the form exactly as on your **PSA Birth Cert**.",
+          t: "Fill in the form **exactly as on your PSA birth certificate** (spelling, middle name, birth date).",
         },
         {
           id: "online:pay",
-          t: "Pay within **24 hours** (GCash, Maya, card, bank).",
+          t: "Pay within **24 hours**: **₱1,000** regular or **₱1,250** expedited (GCash, Maya, card or bank).",
         },
         {
           id: "online:print-packet",
-          t: "Download and print your application packet.",
+          t: "Download and **print your application packet** (form + appointment page).",
         },
       ],
     },
@@ -1644,7 +1655,7 @@ export const DETAILS: Record<string, CardDetail> = {
       online: [
         {
           id: "online:sign-in",
-          t: "Log in to My.SSS → **MySSS Card**.",
+          t: "Log in to **My.SSS** and open **MySSS Card**. (No account yet? Register with your SS number first.)",
           link: {
             label: "My.SSS",
             url: "https://member.sss.gov.ph",
@@ -1652,20 +1663,20 @@ export const DETAILS: Record<string, CardDetail> = {
         },
         {
           id: "online:face-scan",
-          t: "Check your details, then do the **facial scan**.",
+          t: "Check your details, then do the **face scan** with your phone camera.",
           requiresPreparation: true,
         },
         {
           id: "online:choose-bank",
-          t: "Pick a partner bank and save your **TRN**.",
+          t: "Pick a **partner bank** for the card and save your **transaction reference number (TRN)**.",
         },
         {
           id: "online:bank-kyc",
-          t: "Finish the bank’s app KYC and cash in **₱200**.",
+          t: "Download that bank’s app, finish its **ID check**, and add at least **₱200**.",
         },
         {
           id: "online:delivery",
-          t: "Card arrives in **7–15 working days**.",
+          t: "The card is delivered in **7–15 working days**.",
           link: {
             label: "MySSS Card info",
             url: "https://www.sss.gov.ph/mysss-card/",
@@ -1704,8 +1715,15 @@ export const DETAILS: Record<string, CardDetail> = {
         },
         {
           id: "identity",
-          t: "**PSA Birth Cert** or valid ID (+ TIN if employed)",
+          t: "**PSA Birth Certificate** or a valid ID",
           ids: ["psa", "postal", "philsys", "passport", "lto", "prc"],
+        },
+        {
+          id: "tin",
+          t: "**TIN** (your tax number)",
+          onlyIf: "If you’re employed",
+          ids: ["tin"],
+          when: { fact: "employed" },
         },
       ],
       minors: "At 17 you need **guardian consent** and ID.",
@@ -1714,34 +1732,34 @@ export const DETAILS: Record<string, CardDetail> = {
       onsite: [
         {
           id: "onsite:attend",
-          t: "Bring originals and your LTMS appointment printout.",
+          t: "Go to your **LTO office** on your appointment date with your **original documents** and appointment printout.",
           requiresPreparation: true,
         },
         {
           id: "onsite:submit",
-          t: "Submit documents and pay the **₱100** application fee.",
+          t: "Hand in your documents and pay the **₱100** application fee.",
         },
         {
           id: "onsite:biometrics",
-          t: "Photo, signature and fingerprints.",
+          t: "Have your **photo, signature and fingerprints** taken.",
         },
         {
           id: "onsite:exams",
-          t: "Pass the **written exam** (48/60) and **driving test** (80/100).",
+          t: "Take the **written exam** (pass: 48 of 60) and the **driving test** (pass: 80 of 100).",
         },
         {
           id: "onsite:collect",
-          t: "Pay the license fee and claim your card **same day**.",
+          t: "Pay the license fee and **claim your card the same day**.",
         },
       ],
       online: [
         {
           id: "online:complete-training",
-          t: "Finish the PDC and medical first.",
+          t: "First, finish the **Practical Driving Course (PDC)** at an LTO-accredited driving school and a **medical exam** at an LTO-accredited clinic. Both are sent to LTO for you.",
         },
         {
           id: "online:register",
-          t: "Register on LTMS, then **Licensing → New (Non-Pro)**.",
+          t: "Log in to the **LTO portal (LTMS)** and choose **Licensing → New Non-Professional License**.",
           link: {
             label: "LTMS portal",
             url: "https://portal.lto.gov.ph",
@@ -1749,7 +1767,7 @@ export const DETAILS: Record<string, CardDetail> = {
         },
         {
           id: "online:book",
-          t: "Verify your certificates and book a date.",
+          t: "Check that your PDC and medical show up, then **book a date** at your LTO office.",
         },
       ],
     },
@@ -1818,7 +1836,7 @@ export const DETAILS: Record<string, CardDetail> = {
       onsite: [
         {
           id: "onsite:check-membership",
-          t: "Check your MID and contributions first.",
+          t: "Check your **Pag-IBIG MID number** and that your contributions are posted (Virtual Pag-IBIG).",
           link: {
             label: "Virtual Pag-IBIG",
             url: "https://www.pagibigfundservices.com/virtualpagibig/",
@@ -1826,20 +1844,20 @@ export const DETAILS: Record<string, CardDetail> = {
         },
         {
           id: "onsite:visit",
-          t: "Visit a branch with a **loyalty card kiosk**; get a number.",
+          t: "Go to a **Pag-IBIG branch with a Loyalty Card kiosk** and take a queue number.",
         },
         {
           id: "onsite:submit",
-          t: "Submit the form and ID for validation.",
+          t: "Hand in the **Loyalty Card Plus form** and **1 valid ID**.",
           requiresPreparation: true,
         },
         {
           id: "onsite:capture-pay",
-          t: "At the kiosk: photo, signature, fingerprint; pay **₱125**.",
+          t: "At the kiosk, have your **photo, signature and fingerprint** taken, then pay **₱125**.",
         },
         {
           id: "onsite:activate",
-          t: "Claim your card **same day** and activate it in the bank app.",
+          t: "Claim your card **the same day**, then activate it in the partner bank’s app.",
         },
       ],
       online: [],
@@ -1879,8 +1897,15 @@ export const DETAILS: Record<string, CardDetail> = {
         },
         {
           id: "identity",
-          t: "**1 valid ID** (Cedula if your region asks)",
+          t: "**1 valid ID**",
           ids: ["school", "postal", "philsys", "passport", "lto", "prc"],
+        },
+        {
+          id: "cedula",
+          t: "**Cedula** (Community Tax Certificate)",
+          onlyIf: "If your PRC office asks",
+          ids: ["cedula"],
+          opt: true,
         },
       ],
       minors:
@@ -1890,22 +1915,22 @@ export const DETAILS: Record<string, CardDetail> = {
       onsite: [
         {
           id: "onsite:attend",
-          t: "Go to your scheduled **PRC office** with printed forms.",
+          t: "Go to your chosen **PRC office** on the date, with your printed forms.",
           requiresPreparation: true,
         },
         {
           id: "onsite:submit",
-          t: "Submit documents; sign the **Registry Book**.",
+          t: "Hand in your documents and sign the **Registry Book**.",
         },
         {
           id: "onsite:collect",
-          t: "Claim your PIC and certificate (**same day** or on the stub date).",
+          t: "Claim your **PRC ID** and certificate — same day or on the date on your claim stub.",
         },
       ],
       online: [
         {
           id: "online:register",
-          t: "Create your **LERIS** account; photo must match your records.",
+          t: "Create your **PRC LERIS** account. Use a photo that matches your records.",
           link: {
             label: "PRC LERIS",
             url: "https://online.prc.gov.ph",
@@ -1913,15 +1938,15 @@ export const DETAILS: Record<string, CardDetail> = {
         },
         {
           id: "online:oath",
-          t: "Attend your **oath-taking** (e-oath or in person).",
+          t: "Attend your **oath-taking** (online or in person) after passing the board exam.",
         },
         {
           id: "online:book",
-          t: "Book **Initial Registration** and pick an office and date.",
+          t: "In LERIS, book **Initial Registration** and pick a PRC office and date.",
         },
         {
           id: "online:pay-print",
-          t: "Pay online, then print your oath form and slip.",
+          t: "Pay online, then **print your oath form** and appointment slip.",
         },
       ],
     },
@@ -1974,24 +1999,24 @@ export const DETAILS: Record<string, CardDetail> = {
       onsite: [
         {
           id: "onsite:prepare-documents",
-          t: "Get a **medical certificate** and a **Barangay Certificate**.",
+          t: "Get a **medical certificate** from a doctor that states your disability, and a **Barangay Certificate of Residency**.",
         },
         {
           id: "onsite:visit",
-          t: "Go to your **PDAO** or social welfare office.",
+          t: "Go to your city or town’s **PWD Affairs Office (PDAO)** — or the **Social Welfare Office (CSWDO/MSWDO)** if there’s no PDAO.",
         },
         {
           id: "onsite:apply",
-          t: "Fill out the **PRPWD form** and submit requirements.",
+          t: "Fill in the **PWD registration form (PRPWD)** and hand in your documents with **2 1x1 photos**.",
           requiresPreparation: true,
         },
         {
           id: "onsite:verification",
-          t: "Verification, signature and photo capture.",
+          t: "Wait for verification, then sign and have your **photo** taken.",
         },
         {
           id: "onsite:collect",
-          t: "Claim your ID and booklets (**same day – 5 days**).",
+          t: "Claim your **PWD ID and discount booklets** (same day to 5 days).",
         },
       ],
       online: [],
@@ -2042,24 +2067,24 @@ export const DETAILS: Record<string, CardDetail> = {
       onsite: [
         {
           id: "onsite:prepare-documents",
-          t: "Get your **Barangay Certification** and notarized **affidavit**.",
+          t: "Get a **Barangay Certificate** that you live there and a **notarized affidavit** that you’re a solo parent.",
         },
         {
           id: "onsite:prepare-evidence",
-          t: "Prepare the child’s birth certificate and **category proof**.",
+          t: "Prepare your child’s **PSA birth certificate** and proof of your situation (e.g. death certificate, court order).",
         },
         {
           id: "onsite:submit",
-          t: "Submit everything to the **Solo Parents Office**.",
+          t: "Hand everything in at your city or town’s **Social Welfare Office (CSWDO/MSWDO)** or **Solo Parents Office**.",
           requiresPreparation: true,
         },
         {
           id: "onsite:interview",
-          t: "Case assessment interview with a social worker.",
+          t: "Have a short **interview with a social worker**.",
         },
         {
           id: "onsite:collect",
-          t: "Attend the orientation, then claim your **SPIC** (7–30 days).",
+          t: "Attend the short orientation, then claim your **Solo Parent ID** (7–30 days).",
         },
       ],
       online: [],
@@ -2115,16 +2140,16 @@ export const DETAILS: Record<string, CardDetail> = {
       online: [
         {
           id: "online:check-membership",
-          t: "Make sure your **OWWA membership** is active.",
+          t: "Make sure your **OWWA membership** is active (it’s paid with each work contract).",
         },
         {
           id: "online:register",
-          t: "Create an account in the OWWA mobile app with your **passport details**.",
+          t: "Download the **OWWA Mobile App** and sign up using your **passport details**.",
           requiresPreparation: true,
         },
         {
           id: "online:digital-card",
-          t: "Open your digital **OWWA e-Card**.",
+          t: "Open the **OFW e-Card** section in the app — that’s your ID.",
         },
       ],
     },
@@ -2172,24 +2197,24 @@ export const DETAILS: Record<string, CardDetail> = {
       onsite: [
         {
           id: "onsite:residency",
-          t: "Get a **Barangay Certificate of Residency**.",
+          t: "Get a **Barangay Certificate of Residency** from your Barangay Hall.",
         },
         {
           id: "onsite:visit",
-          t: "Go to your **OSCA** and ask for the application form.",
+          t: "Go to the **Office of Senior Citizens Affairs (OSCA)** at your City/Municipal Hall and ask for the form.",
         },
         {
           id: "onsite:submit",
-          t: "Submit form, proof of age, residency and photos.",
+          t: "Hand in the form with **proof of age** (birth certificate or ID), your residency certificate and **2 1x1 photos**.",
           requiresPreparation: true,
         },
         {
           id: "onsite:capture",
-          t: "Sign / thumbmark; some LGUs capture biometrics.",
+          t: "Sign or thumbmark the form. Some cities also take your **photo and fingerprints**.",
         },
         {
           id: "onsite:collect",
-          t: "Claim your ID and **purchase booklets** (same day – 3 days).",
+          t: "Claim your **Senior Citizen ID** and **discount booklets** (same day to 3 days).",
         },
       ],
       online: [],

@@ -82,7 +82,7 @@ export function recommendAcquisitions(
           documentValidity(input.documents?.[node.id], catalog.asOf).status !==
             "valid"
             ? documentValidity(input.documents?.[node.id], catalog.asOf).reason
-            : "Recorded in your inventory. Acceptance still depends on the receiving office.",
+            : "You have this. Each office decides if it accepts it.",
         additionalAcquisitions: 0,
         questions: 0,
         limited: false,
@@ -91,10 +91,10 @@ export function recommendAcquisitions(
       assessment = {
         status: ineligible ? "ineligible" : "unresolved",
         reason: ineligible
-          ? "Your current answers do not meet the modeled eligibility checks. Review them in the guide."
+          ? "Based on your answers, you may not qualify yet. Check the guide."
           : result.search.complete
-            ? "No supported route was found. Review your documents and the issuing office's requirements."
-            : "The search was limited before a complete route was found. Review the guide or add more information.",
+            ? "No route found with what you have. Check the guide for what’s needed."
+            : "We couldn’t find a full route yet. Add what you have or answer a few questions.",
         additionalAcquisitions: null,
         questions: 0,
         limited: !result.search.complete,
@@ -122,15 +122,15 @@ export function recommendAcquisitions(
           ? "available"
           : "preparation";
       const reason = questions
-        ? `${questions} unanswered condition${questions === 1 ? "" : "s"} or outside document${questions === 1 ? "" : "s"} to confirm. Open the guide to review.`
+        ? `Answer ${questions} quick question${questions === 1 ? "" : "s"} in the guide to confirm.`
         : extra
-          ? `First acquire ${plan.steps
+          ? `First get ${plan.steps
               .filter((s) => s.id !== node.id)
               .map((s) => s.name)
               .join(", ")}.`
           : used.length
-            ? `Uses your ${used.slice(0, 2).join(" and ")}. Review the remaining checklist.`
-            : "Review the preparation and application steps for this route.";
+            ? `Uses your ${used.slice(0, 2).join(" and ")}. Check what’s left in the guide.`
+            : "Open the guide to see what to bring and where to go.";
       assessment = {
         status,
         reason,

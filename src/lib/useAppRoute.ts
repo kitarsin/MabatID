@@ -72,6 +72,13 @@ export function useAppRoute(signedIn: boolean, ready: boolean) {
     latest.current = { ...latest.current, view: null, id: null, screen: "landing" };
   }, []);
 
+  /** Guest "Home": open the landing as a new entry, so Back returns to the screen they came from. */
+  const landing = useCallback(() => {
+    if (latest.current.screen === "landing") return;
+    window.history.pushState(null, "", "/");
+    latest.current = { ...latest.current, view: null, id: null, screen: "landing" };
+  }, []);
+
   /** Leave the Auth / Edit screen: pop the entry we pushed, or replace if the user arrived by link/refresh. */
   const back = useCallback(
     (from: "auth" | "edit", fallback: View | null) => {
@@ -104,5 +111,5 @@ export function useAppRoute(signedIn: boolean, ready: boolean) {
     else write("replace", cur.view, null);
   }, [write]);
 
-  return { screen: route.screen, openId: route.id, go, home, back, openCard, closeCard };
+  return { screen: route.screen, openId: route.id, go, home, landing, back, openCard, closeCard };
 }

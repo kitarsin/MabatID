@@ -73,7 +73,7 @@ export function Onboarding({
 
         <div className="space-y-2">
           <label htmlFor="profile-age" className="font-semibold">
-            Applicant age
+            Your age
           </label>
           <Input
             id="profile-age"
@@ -89,7 +89,7 @@ export function Onboarding({
             }
           />
           <p className="text-xs text-muted-foreground">
-            Keep this up to date so age checks remain accurate.
+            Some IDs have age rules.
           </p>
         </div>
 
@@ -98,9 +98,7 @@ export function Onboarding({
             What do you already have?
           </h2>
           <p className="mb-3 text-sm text-muted-foreground">
-            Select current items belonging to the applicant. The child’s birth
-            certificate has its own entry. Check any validity or format
-            conditions with the issuing office.
+            Tick the ones you have now. Make sure they’re still valid.
           </p>
           <div className="mb-4">
             <GroupGuide />
@@ -111,9 +109,6 @@ export function Onboarding({
                 <legend className="mb-2 text-[13px] font-semibold text-civic">
                   {GROUP_META[g].label}
                 </legend>
-                <p className="mb-3 text-xs text-muted-foreground">
-                  {GROUP_META[g].blurb}
-                </p>
                 <ul className="space-y-2">
                   {CARDS.filter((c) => c.group === g).map((c) => (
                     <li key={c.id}>
@@ -141,7 +136,7 @@ export function Onboarding({
                 {EXTRA_DOCUMENTS.some((d) => d.group === g) && (
                   <>
                     <p className="mb-2 mt-3 text-xs font-semibold text-muted-foreground">
-                      Other items you can record · no application guide
+                      Other documents you might have
                     </p>
                     <ul className="space-y-2">
                       {EXTRA_DOCUMENTS.filter((d) => d.group === g).map((d) => (
@@ -168,8 +163,7 @@ export function Onboarding({
             What’s your budget per ID?
           </h2>
           <p className="mb-3 text-sm text-muted-foreground">
-            We’ll compare standard fees. Waivers and additional costs need
-            confirmation.
+            We’ll use standard fees. Some places charge more or less.
           </p>
           <div className="space-y-2" role="radiogroup" aria-labelledby="budget">
             {BUDGETS.map((b) => (

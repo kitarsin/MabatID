@@ -6,7 +6,6 @@ import { Chip } from "@/components/ui/chip";
 import { Pill } from "@/components/ui/pill";
 import {
   CARDS,
-  CARD_KIND_META,
   CATEGORY_META,
   GROUP_META,
   CREDENTIAL_GROUPS,
@@ -51,14 +50,13 @@ export function BrowseScreen({
   }, [q, cat, kind]);
 
   return (
-    <div className="mx-auto w-full max-w-md space-y-4 px-5 pb-10 pt-5">
+    <div className="mx-auto w-full max-w-md space-y-6 px-5 pb-12 pt-6">
       <div>
-        <h1 className="text-2xl font-bold leading-tight tracking-tight">
+        <h1 className="text-2xl font-semibold leading-tight tracking-tight text-navy">
           IDs &amp; documents
         </h1>
-        <p className="text-sm text-muted-foreground">
-          Browse every ID and document — requirements, steps and official
-          references.
+        <p className="mt-1.5 text-[15px] text-muted-foreground">
+          What each one needs and how to get it.
         </p>
       </div>
 
@@ -74,12 +72,12 @@ export function BrowseScreen({
           type="search"
           value={q}
           onChange={(e) => setQ(e.target.value)}
-          placeholder="Search by name or agency…"
+          placeholder="Search by name or office…"
           aria-label="Search IDs and documents"
           autoComplete="off"
           enterKeyHint="search"
           spellCheck={false}
-          className="h-12 w-full rounded-2xl border-2 border-input bg-card pl-11 pr-12 text-base transition-colors duration-[var(--dur-fast)] focus-visible:border-civic [&::-webkit-search-cancel-button]:appearance-none"
+          className="h-12 w-full rounded-full border border-navy/10 bg-white pl-11 pr-12 shadow-[0_1px_2px_rgb(27_54_93/0.05)] text-base transition-colors duration-[var(--dur-fast)] focus-visible:border-civic [&::-webkit-search-cancel-button]:appearance-none"
         />
         {q && (
           <button
@@ -125,7 +123,7 @@ export function BrowseScreen({
           {q.trim()
             ? `No items match “${q.trim()}” with these filters.`
             : "No items match these filters."}{" "}
-          Try another type, category or search.
+          Try a different filter or search.
         </p>
       )}
 
@@ -133,17 +131,14 @@ export function BrowseScreen({
         const items = list.filter((c) => c.group === g);
         if (!items.length) return null;
         return (
-          <section key={g} aria-labelledby={`browse-group-${g}`}>
+          <section key={g} aria-labelledby={`browse-group-${g}`} className="pt-4">
             <h2
               id={`browse-group-${g}`}
-              className="text-[13px] font-semibold text-civic"
+              className="mb-4 text-xs font-semibold tracking-wide text-muted-foreground uppercase"
             >
               {GROUP_META[g].label}
             </h2>
-            <p className="mb-3 mt-1 text-xs text-muted-foreground">
-              {GROUP_META[g].blurb}
-            </p>
-            <ul className="space-y-2">
+            <ul className="space-y-3">
               {items.map((c) => {
                 const d = DETAILS[c.id];
                 return (
@@ -152,7 +147,7 @@ export function BrowseScreen({
                       type="button"
                       onClick={() => onOpen(c.id)}
                       data-card-id={c.id}
-                      className="flex w-full gap-3 rounded-2xl bg-card p-3.5 text-left shadow-sm ring-1 ring-border transition-[background-color,scale] duration-[var(--dur-fast)] ease-[var(--ease-out)] hover:bg-muted active:scale-[0.985] active:duration-[var(--dur-press)]"
+                      className="flex w-full gap-4 rounded-[20px] bg-card p-4 text-left ring-1 ring-navy/[0.08] transition-[background-color,scale] duration-[var(--dur-fast)] ease-[var(--ease-out)] hover:bg-muted active:scale-[0.985] active:duration-[var(--dur-press)]"
                     >
                       <span className="grid size-12 shrink-0 place-items-center rounded-full border-2 border-civic bg-white text-civic">
                         <CardIcon name={c.icon} className="size-6" />
@@ -171,12 +166,11 @@ export function BrowseScreen({
                         <span className="mt-0.5 block text-xs font-semibold text-muted-foreground">
                           {d.issuedBy}
                         </span>
-                        <span className="mt-1.5 block text-sm leading-snug">
+                        <span className="mt-2 line-clamp-2 block text-sm leading-relaxed text-muted-foreground">
                           <Rich text={d.req.fee} />
                         </span>
-                        <span className="mt-2 flex flex-wrap gap-1.5">
+                        <span className="mt-3 flex flex-wrap gap-1.5">
                           {c.starter && <Pill>Starter ID</Pill>}
-                          <Pill>{CARD_KIND_META[c.kind].singular}</Pill>
                           <Pill>{CATEGORY_META[c.category].label}</Pill>
                           {d.onsite && (
                             <Pill>

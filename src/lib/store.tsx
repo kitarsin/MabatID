@@ -46,6 +46,8 @@ interface Store {
   users: User[];
   me: User | null;
   createProfile: (v: { name: string; age: number }) => string | null;
+  /** Adds a profile received from another device (as a new profile) and switches to it. Null on success. */
+  importProfile: (profile: unknown) => string | null;
   selectProfile: (id: string) => void;
   logout: () => void;
   toggleOwned: (cardId: string) => void;
@@ -137,6 +139,18 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         owned: [],
         createdAt: Date.now(),
       };
+      persist((profiles) => [...profiles, profile]);
+      setMeId(profile.id);
+      write(ACTIVE_KEY, profile.id);
+      return null;
+    },
+    [persist],
+  );
+  const importProfile = useCallback(
+    (incoming: unknown) => {
+      const clean = normalizeProfile(incoming);
+      if (!clean) return "This transfer couldn’t be read.";
+      const profile: User = { ...clean, id: crypto.randomUUID() };
       persist((profiles) => [...profiles, profile]);
       setMeId(profile.id);
       write(ACTIVE_KEY, profile.id);
@@ -254,6 +268,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       users,
       me,
       createProfile,
+      importProfile,
       selectProfile,
       logout,
       toggleOwned,
@@ -270,6 +285,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       users,
       me,
       createProfile,
+      importProfile,
       selectProfile,
       logout,
       toggleOwned,

@@ -4,11 +4,11 @@ import { cn } from "cn"
 type PillTone = "mist" | "navy" | "civic" | "amber" | "muted" | "onDark"
 
 const TONES: Record<PillTone, string> = {
-  mist: "bg-mist text-navy",
+  mist: "bg-mist/80 text-navy ring-1 ring-sky/30",
   navy: "bg-navy text-white",
   civic: "bg-civic text-white",
   amber: "bg-amber text-navy",
-  muted: "bg-muted text-muted-foreground",
+  muted: "bg-navy/[0.05] text-muted-foreground ring-1 ring-navy/5",
   /** Quiet pill for navy surfaces. */
   onDark: "bg-white/10 text-white ring-1 ring-white/25",
 }
