@@ -73,7 +73,6 @@ export function App() {
     toggleTrack,
     setPriority,
     savePrefs,
-    importProfile,
     setFact,
     setMode,
     setDocumentEvidence,
@@ -489,7 +488,6 @@ export function App() {
                   home();
                 }}
                 onCreateProfile={() => go("auth")}
-                onImport={importProfile}
               />
             </div>
           ) : (

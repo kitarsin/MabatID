@@ -1,339 +1,167 @@
 "use client";
 
-import { useEffect, useId, useState } from "react";
-import {
-  Check,
-  Copy,
-  Download,
-  LoaderCircle,
-  RefreshCw,
-  Send,
-} from "lucide-react";
+import { useEffect, useId, useRef, useState } from "react";
+import { Check, Copy, Download, LoaderCircle, RefreshCw, Send } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { Disclosure } from "@/components/ui/disclosure";
-import { Pill } from "@/components/ui/pill";
-import type { User } from "@/lib/profile";
-import {
-  buildPayload,
-  CODE_LENGTH,
-  createTransferCode,
-  formatCode,
-  normalizeCode,
-  redeemTransferCode,
-  TRANSFER_CONNECTED,
-  TransferError,
-  type TransferCode,
-  type TransferErrorKind,
-} from "@/lib/transfer";
+import { useStore, type BackupRestoreController } from "@/lib/store";
+import type { ImportChoice, ImportOptions, ImportPreview } from "@/lib/profile-repository";
+import { CODE_LENGTH, TransferError, createTransferCode, finishTransfer, formatCode, normalizeCode, randomToken, redeemTransferCode, releaseTransfer, revokeTransfer, transferAvailable, validCode, validId, validToken, type TransferCode, type TransferClaim } from "@/lib/transfer";
+import { ImportReview } from "./ImportReview";
 
-const ERRORS: Record<TransferErrorKind, string> = {
-  "not-connected": "Transfers aren’t switched on yet. Please try again later.",
-  invalid: `Enter all ${CODE_LENGTH} characters.`,
-  "not-found": "We couldn’t find that code. Check it and try again.",
-  expired: "This code has expired. Make a new one on your other device.",
-  network: "Can’t connect right now. Check your internet and try again.",
-};
-const errorText = (e: unknown) =>
-  e instanceof TransferError ? ERRORS[e.kind] : ERRORS.network;
-
-/** Move a profile between devices with a short one-time code. UI only; see src/lib/transfer.ts. */
-export function TransferPanel({
-  me,
-  onImport,
-}: {
-  me: User | null;
-  onImport: (profile: unknown) => string | null;
-}) {
-  return (
-    <section aria-labelledby="transfer">
-      <div className="flex flex-wrap items-center gap-2">
-        <h2
-          id="transfer"
-          className="flex-1 text-lg font-semibold tracking-tight text-navy"
-        >
-          Move to another device
-        </h2>
-        {!TRANSFER_CONNECTED && <Pill tone="muted">Preview · not connected yet</Pill>}
-      </div>
-      <p className="mt-1.5 text-[15px] leading-relaxed text-muted-foreground">
-        Use a one-time code to copy everything to a new phone or computer.
-      </p>
-      <div className="mt-5 space-y-3">
-        {me && <SendCard me={me} />}
-        <ReceiveCard onImport={onImport} hasProfile={!!me} />
-      </div>
-    </section>
-  );
+const errorText = (e: unknown) => e instanceof Error ? e.message : "Could not complete this transfer.";
+export function TransferPanel({ controller }: { controller: BackupRestoreController }) {
+  const [available, setAvailable] = useState<boolean | null>(null);
+  useEffect(() => { let live = true; void transferAvailable().then((value) => { if (live) setAvailable(value); }); return () => { live = false; }; }, []);
+  return <section aria-label="Move to another device" className="space-y-4">
+    <h2 className="text-lg font-semibold tracking-tight text-navy">Move to another device</h2>
+    <p className="text-sm text-muted-foreground">Use a private, one-time code to copy a profile. This temporarily uploads an encrypted backup to our server and Supabase; our server can decrypt it. Codes expire after 10 minutes. There is no continuous synchronization. Anyone with the code can retrieve the backup, so share it privately.</p>
+    {available === null ? <p role="status" className="text-sm">Checking code transfers…</p> : !available ? <div className="space-y-2 rounded-2xl bg-muted p-4 text-sm">
+      <p role="status">Code transfers are unavailable right now. You can still use Backup &amp; restore above.</p>
+      <Button type="button" variant="outline" size="md" onClick={async () => { setAvailable(null); setAvailable(await transferAvailable()); }}>Check again</Button>
+    </div> : <div className="space-y-4">
+      {controller.users.length > 0 && <SendCard controller={controller} />}
+      <ReceiveCard controller={controller} />
+    </div>}
+  </section>;
 }
-
-function SendCard({ me }: { me: User }) {
-  const [state, setState] = useState<
-    | { s: "idle" }
-    | { s: "loading" }
-    | { s: "ready"; code: TransferCode }
-    | { s: "error"; message: string }
-  >({ s: "idle" });
-  const [now, setNow] = useState(() => Date.now());
-  const [copied, setCopied] = useState(false);
-
+function SendCard({ controller }: { controller: BackupRestoreController }) {
+  const uid = useId();
+  const [selected, setSelected] = useState(controller.activeId ?? controller.users[0]?.id ?? "");
+  const [code, setCode] = useState<TransferCode | null>(null);
+  const [busy, setBusy] = useState(false), [error, setError] = useState<string | null>(null), [copied, setCopied] = useState(false);
+  const [remaining, setRemaining] = useState(0);
+  const clock = useRef({ start: 0, duration: 0 });
+  const pending = useRef<{ id: string; token: string; backup: string; profileId: string } | null>(null);
+  const chosen = controller.users.some((p) => p.id === selected) ? selected : controller.users[0]?.id ?? "";
   useEffect(() => {
-    if (state.s !== "ready") return;
-    const t = setInterval(() => setNow(Date.now()), 1000);
-    return () => clearInterval(t);
-  }, [state.s]);
-
-  const create = async () => {
-    setState({ s: "loading" });
-    setCopied(false);
+    if (!code) return;
+    const timer = window.setInterval(() => setRemaining(Math.max(0,clock.current.duration-(performance.now()-clock.current.start))),1000);
+    return () => window.clearInterval(timer);
+  }, [code]);
+  async function create() {
+    setBusy(true); setError(null); setCopied(false);
     try {
-      const code = await createTransferCode(buildPayload(me));
-      setNow(Date.now());
-      setState({ s: "ready", code });
-    } catch (e) {
-      setState({ s: "error", message: errorText(e) });
-    }
-  };
-
-  const left =
-    state.s === "ready" ? Math.max(0, state.code.expiresAt - now) : 0;
-  const expired = state.s === "ready" && left === 0;
-  const mm = Math.floor(left / 60000);
-  const ss = String(Math.floor((left % 60000) / 1000)).padStart(2, "0");
-
-  return (
-    <div className="rounded-[24px] bg-card p-5 ring-1 ring-navy/[0.08]">
-      <div className="flex items-start gap-3">
-        <span className="grid size-10 shrink-0 place-items-center rounded-full bg-mist/60 text-civic">
-          <Send className="size-5" aria-hidden="true" />
-        </span>
-        <div className="min-w-0">
-          <p className="font-semibold text-navy">Send from this device</p>
-          <p className="mt-0.5 text-sm leading-relaxed text-muted-foreground">
-            Make a code, then type it on your new device.
-          </p>
-        </div>
-      </div>
-
-      {state.s === "ready" ? (
-        <div className="mt-5" aria-live="polite">
-          <div
-            className={`rounded-[20px] bg-navy/[0.04] px-4 py-5 text-center ring-1 ring-navy/[0.06] transition-opacity duration-[var(--dur-base)] ${expired ? "opacity-50" : ""}`}
-          >
-            <p className="text-xs font-semibold tracking-wide text-muted-foreground uppercase">
-              Your code
-            </p>
-            <p
-              className="mt-2 font-mono text-[32px] leading-none font-semibold tracking-[0.12em] text-navy tabular-nums select-all"
-              aria-label={state.code.code.split("").join(" ")}
-            >
-              {formatCode(state.code.code)}
-            </p>
-            <p className="mt-3 text-sm text-muted-foreground tabular-nums">
-              {expired ? "This code has expired." : `Expires in ${mm}:${ss}`}
-            </p>
-          </div>
-          <div className="mt-3 flex flex-wrap gap-2">
-            {!expired && (
-              <Button
-                type="button"
-                variant="brand"
-                size="md"
-                onClick={async () => {
-                  try {
-                    await navigator.clipboard.writeText(state.code.code);
-                    setCopied(true);
-                  } catch {
-                    setCopied(false);
-                  }
-                }}
-              >
-                {copied ? (
-                  <Check className="size-4" aria-hidden="true" />
-                ) : (
-                  <Copy className="size-4" aria-hidden="true" />
-                )}
-                {copied ? "Copied" : "Copy code"}
-              </Button>
-            )}
-            <Button type="button" variant="outline" size="md" onClick={create}>
-              <RefreshCw className="size-4" aria-hidden="true" />
-              New code
-            </Button>
-          </div>
-          {!TRANSFER_CONNECTED && (
-            <p className="mt-3 text-xs leading-relaxed text-muted-foreground">
-              This is a sample code for preview. It won’t work until transfers
-              are switched on.
-            </p>
-          )}
-        </div>
-      ) : (
-        <div className="mt-5 space-y-3">
-          <Button
-            type="button"
-            variant="cta"
-            size="md"
-            onClick={create}
-            disabled={state.s === "loading"}
-          >
-            {state.s === "loading" ? (
-              <LoaderCircle className="size-4 animate-spin" aria-hidden="true" />
-            ) : null}
-            {state.s === "loading" ? "Making your code…" : "Make a code"}
-          </Button>
-          {state.s === "error" && (
-            <p role="alert" className="text-sm text-destructive">
-              {state.message}
-            </p>
-          )}
-        </div>
-      )}
-
-      <Disclosure variant="inline" summary="What gets copied" className="mt-3">
-        <ul className="list-disc space-y-1 pl-5 text-sm leading-relaxed text-muted-foreground">
-          <li>Your name, age and answers</li>
-          <li>IDs and documents you have</li>
-          <li>Budget and how you like to apply</li>
-          <li>Checklist ticks and chosen routes (your plans)</li>
-          <li>What you’re tracking and your priority</li>
-        </ul>
-        <p className="mt-2 text-xs leading-relaxed text-muted-foreground">
-          The code works once and expires after 10 minutes. Don’t share it with
-          anyone.
-        </p>
-      </Disclosure>
+      if (code) {
+        try { await revokeTransfer(code.id,code.ownerToken); } catch (e) { if (!(e instanceof TransferError && e.kind === "not-found")) throw e; }
+        setCode(null); pending.current = null;
+      }
+      if (!pending.current || pending.current.profileId !== chosen) pending.current = { id: crypto.randomUUID(), token: randomToken(), backup: await controller.downloadBackup(chosen), profileId: chosen };
+      const request = pending.current;
+      const result = await createTransferCode(request.backup,request.id,request.token);
+      clock.current = { start: performance.now(), duration: result.remainingMs };
+      setRemaining(result.remainingMs); setCode(result);
+    } catch (e) { setError(errorText(e)); }
+    finally { setBusy(false); }
+  }
+  return <div className="space-y-4 rounded-[24px] bg-card p-5 ring-1 ring-navy/[0.08]">
+    <h3 className="flex items-center gap-2 font-semibold"><Send aria-hidden="true" className="size-5 text-civic" /> Send from this device</h3>
+    <label className="block space-y-2 text-sm font-semibold" htmlFor={`${uid}-profile`}>Profile to send
+      <select id={`${uid}-profile`} value={chosen} disabled={busy || !!code} onChange={(e) => { setSelected(e.target.value); pending.current = null; }} className="block min-h-12 w-full min-w-0 rounded-xl border border-border bg-card px-3 text-sm">
+        {controller.users.map((p) => <option key={p.id} value={p.id}>{p.name} · {p.id.slice(0,8)}</option>)}
+      </select>
+    </label>
+    {code && <div className="space-y-3 rounded-2xl bg-muted p-4 text-center" aria-live="polite">
+      <p className="text-xs font-semibold uppercase text-muted-foreground">Your private code</p>
+      <p className="break-all font-mono text-xl font-bold tracking-wider select-all">{formatCode(code.code)}</p>
+      <p className="text-sm tabular-nums">{remaining > 0 ? `Expires in ${Math.floor(remaining/60000)}:${String(Math.floor(remaining/1000)%60).padStart(2,"0")}` : "This code has expired. Make a new one."}</p>
+      <p className="text-xs text-muted-foreground">This is a snapshot. Edits made after generating this code are not included.</p>
+    </div>}
+    <div className="flex flex-wrap gap-2">
+      {code && remaining > 0 && <Button type="button" variant="brand" size="md" disabled={busy} onClick={async () => { try { await navigator.clipboard.writeText(formatCode(code.code)); setCopied(true); } catch { setError("Could not copy. Select the code above to copy it manually."); } }}>{copied ? <Check aria-hidden="true" /> : <Copy aria-hidden="true" />}{copied ? "Copied" : "Copy code"}</Button>}
+      <Button type="button" variant="cta" size="md" disabled={busy || !chosen} onClick={create}>{busy ? <LoaderCircle className="animate-spin" aria-hidden="true" /> : code ? <RefreshCw aria-hidden="true" /> : null}{busy ? "Making code…" : code ? "New code" : "Make a code"}</Button>
+      {code && <Button type="button" variant="outline" size="md" disabled={busy} onClick={async () => { setBusy(true); setError(null); try { await revokeTransfer(code.id,code.ownerToken); setCode(null); pending.current = null; } catch (e) { if (e instanceof TransferError && e.kind === "not-found") { setCode(null); pending.current = null; } else setError(errorText(e)); } finally { setBusy(false); } }}>Cancel code</Button>}
     </div>
-  );
+    {error && <p role="alert" className="text-sm text-destructive">{error}</p>}
+  </div>;
 }
-
-function ReceiveCard({
-  onImport,
-  hasProfile,
-}: {
-  onImport: (profile: unknown) => string | null;
-  hasProfile: boolean;
-}) {
-  const id = useId();
+const PENDING_KEY = "mabatid.transfer.receive.v1";
+interface Pending { code: string; claimToken: string; id?: string }
+function remember(pending: Pending) {
+  try { sessionStorage.setItem(PENDING_KEY,JSON.stringify(pending)); } catch { throw new TransferError("storage"); }
+}
+function ReceiveCard({ controller }: { controller: BackupRestoreController }) {
+  const uid = useId();
   const [code, setCode] = useState("");
-  const [step, setStep] = useState<"enter" | "confirm" | "loading" | "done">(
-    "enter",
-  );
-  const [error, setError] = useState<string | null>(null);
-  const complete = code.length === CODE_LENGTH;
-
-  const redeem = async () => {
-    setStep("loading");
-    setError(null);
+  const [pending, setPending] = useState<Pending | null>(null);
+  const [claim, setClaim] = useState<TransferClaim | null>(null);
+  const [preview, setPreview] = useState<ImportPreview | null>(null);
+  const [busy, setBusy] = useState(false), [error, setError] = useState<string | null>(null), [status, setStatus] = useState<string | null>(null);
+  const [saved, setSaved] = useState(false);
+  const request = useRef<Pending | null>(null);
+  useEffect(() => {
+    let live = true;
+    // Resume credentials only, never the personal payload, survive a reload in this tab.
+    void Promise.resolve().then(() => {
+      try {
+        const raw = JSON.parse(sessionStorage.getItem(PENDING_KEY) ?? "null") as Pending | null;
+        if (live && raw && validCode(raw.code) && validToken(raw.claimToken) && (!raw.id || validId(raw.id))) { request.current = raw; setPending(raw); setCode(raw.code); }
+      } catch { /* A new receive attempt reports unavailable session storage explicitly. */ }
+    });
+    return () => { live = false; };
+  }, []);
+  const savedHere = saved || !!(pending?.id && controller.importReceipts?.[pending.id]);
+  function clearPending() { try { sessionStorage.removeItem(PENDING_KEY); } catch { /* A stale completion credential cannot repeat a receipted import. */ } request.current = null; setPending(null); setClaim(null); setPreview(null); setCode(""); }
+  async function acknowledge(value: Pending) {
+    if (!value.id) return;
+    try { await finishTransfer(value.id,value.claimToken); }
+    catch (e) { if (!(e instanceof TransferError && e.kind === "not-found")) throw e; }
+    clearPending(); setSaved(false); setStatus("Profile saved on this device. Transfer complete.");
+  }
+  async function receive() {
+    setBusy(true); setError(null); setStatus(null); setPreview(null);
+    let previouslySaved = false;
     try {
-      const payload = await redeemTransferCode(code);
-      const problem = onImport(payload.profile);
-      if (problem) {
-        setError(problem);
-        setStep("enter");
-      } else setStep("done");
-    } catch (e) {
-      setError(errorText(e));
-      setStep("enter");
-    }
-  };
-
-  return (
-    <div className="rounded-[24px] bg-card p-5 ring-1 ring-navy/[0.08]">
-      <div className="flex items-start gap-3">
-        <span className="grid size-10 shrink-0 place-items-center rounded-full bg-mist/60 text-civic">
-          <Download className="size-5" aria-hidden="true" />
-        </span>
-        <div className="min-w-0">
-          <p className="font-semibold text-navy">Get from another device</p>
-          <p className="mt-0.5 text-sm leading-relaxed text-muted-foreground">
-            Type the code shown on your old device.
-          </p>
-        </div>
-      </div>
-
-      {step === "done" ? (
-        <p
-          role="status"
-          className="mt-5 flex items-center gap-2 rounded-2xl bg-mist/50 px-4 py-3 text-sm font-semibold text-navy"
-        >
-          <Check className="size-4" strokeWidth={3} aria-hidden="true" />
-          All set — your profile is on this device now.
-        </p>
-      ) : (
-        <form
-          className="mt-5 space-y-3"
-          onSubmit={(e) => {
-            e.preventDefault();
-            if (!complete) return setError(ERRORS.invalid);
-            setStep("confirm");
-          }}
-        >
-          <label htmlFor={id} className="sr-only">
-            Transfer code
-          </label>
-          <input
-            id={id}
-            value={formatCode(code)}
-            onChange={(e) => {
-              setCode(normalizeCode(e.target.value));
-              setError(null);
-              if (step === "confirm") setStep("enter");
-            }}
-            placeholder="XXXX-XXXX"
-            inputMode="text"
-            autoCapitalize="characters"
-            autoComplete="one-time-code"
-            spellCheck={false}
-            maxLength={CODE_LENGTH + 1}
-            aria-invalid={!!error || undefined}
-            aria-describedby={error ? `${id}-error` : undefined}
-            disabled={step === "loading"}
-            className="h-14 w-full rounded-2xl border border-navy/15 bg-white px-4 text-center font-mono text-2xl font-semibold tracking-[0.12em] text-navy uppercase placeholder:text-navy/20 focus-visible:border-civic"
-          />
-          {error && (
-            <p id={`${id}-error`} role="alert" className="text-sm text-destructive">
-              {error}
-            </p>
-          )}
-
-          {step === "confirm" || step === "loading" ? (
-            <div className="space-y-3 rounded-2xl bg-amber/15 p-4">
-              <p className="text-sm leading-relaxed text-navy">
-                {hasProfile
-                  ? "This adds the transferred profile to this device and switches to it. Your current profile stays saved."
-                  : "This adds the transferred profile to this device and opens it."}
-              </p>
-              <div className="flex flex-wrap gap-2">
-                <Button
-                  type="button"
-                  variant="cta"
-                  size="md"
-                  onClick={redeem}
-                  disabled={step === "loading"}
-                >
-                  {step === "loading" && (
-                    <LoaderCircle className="size-4 animate-spin" aria-hidden="true" />
-                  )}
-                  {step === "loading" ? "Getting your data…" : "Yes, bring it over"}
-                </Button>
-                <Button
-                  type="button"
-                  variant="ghost"
-                  size="md"
-                  onClick={() => setStep("enter")}
-                  disabled={step === "loading"}
-                >
-                  Cancel
-                </Button>
-              </div>
-            </div>
-          ) : (
-            <Button type="submit" variant="brand" size="md" disabled={!complete}>
-              Continue
-            </Button>
-          )}
-        </form>
-      )}
-    </div>
-  );
+      const value = request.current ?? { code: normalizeCode(code), claimToken: randomToken() };
+      if (!validCode(value.code)) throw new TransferError("invalid");
+      remember(value); request.current = value; setPending(value);
+      const result = await redeemTransferCode(value.code,value.claimToken);
+      const next = { ...value, id: result.id }; remember(next); request.current = next; setPending(next); setClaim(result);
+      if (controller.importReceipts?.[result.id]) { previouslySaved = true; setSaved(true); await acknowledge(next); return; }
+      if (result.completed || !result.backup) throw new TransferError("not-found");
+      setPreview(await controller.previewBackup(result.backup));
+    } catch (e) { setError(previouslySaved ? "Your profile is already saved. Use Finish transfer to retry completion without importing again." : errorText(e)); }
+    finally { setBusy(false); }
+  }
+  async function cancel() {
+    setBusy(true); setError(null);
+    try {
+      let value = request.current;
+      if (value) {
+        if (!value.id) {
+          try { const result = await redeemTransferCode(value.code,value.claimToken); value = { ...value, id: result.id }; } catch (e) { if (!(e instanceof TransferError && e.kind === "not-found")) throw e; }
+        }
+        if (value.id && !controller.importReceipts?.[value.id]) { try { await releaseTransfer(value.id,value.claimToken); } catch (e) { if (!(e instanceof TransferError && e.kind === "not-found")) throw e; } }
+      }
+      clearPending(); setStatus("Transfer review canceled. Saved profiles have not been changed.");
+    } catch (e) { setError(errorText(e)); }
+    finally { setBusy(false); }
+  }
+  async function commit(choice: ImportChoice, options: ImportOptions) {
+    if (!preview || !claim || !request.current) return;
+    setBusy(true); setError(null); let durable = false;
+    const value = request.current;
+    try {
+      const verified = await redeemTransferCode(value.code,value.claimToken);
+      if (verified.id !== claim.id || verified.completed) throw new TransferError("not-found");
+      const problem = await controller.commitBackup(preview,choice,{ ...options, receipt: claim.id });
+      if (problem) { setError(problem); return; }
+      durable = true; setSaved(true); setPreview(null);
+      await acknowledge(value);
+    } catch (e) { setError(durable ? "Your profile is saved. Transfer completion could not be confirmed; use Finish transfer to retry without importing again." : errorText(e)); }
+    finally { setBusy(false); }
+  }
+  return <div className="space-y-4 rounded-[24px] bg-card p-5 ring-1 ring-navy/[0.08]">
+    <h3 className="flex items-center gap-2 font-semibold"><Download aria-hidden="true" className="size-5 text-civic" /> Get from another device</h3>
+    {!preview && !savedHere && <form className="space-y-3" onSubmit={(e) => { e.preventDefault(); void receive(); }}>
+      <label htmlFor={uid} className="block text-sm font-semibold">Transfer code</label>
+      <input id={uid} value={formatCode(code)} onChange={(e) => { setCode(normalizeCode(e.target.value).slice(0,CODE_LENGTH)); setError(null); }} disabled={busy || !!pending} placeholder="XXXX-XXXX-XXXX" autoComplete="one-time-code" autoCapitalize="characters" spellCheck={false} maxLength={CODE_LENGTH+2} aria-invalid={!!error || undefined} className="min-h-12 w-full min-w-0 rounded-2xl border border-border bg-card px-3 text-center font-mono text-base font-semibold tracking-wider" />
+      <Button type="submit" variant="brand" size="md" disabled={busy || !validCode(code)}>{busy ? "Getting backup…" : pending ? "Resume transfer" : "Review transfer"}</Button>
+    </form>}
+    {preview && <ImportReview key={preview.targetToken ?? "new"} preview={preview} users={controller.users} busy={busy} onReview={() => { void receive(); }} onCommit={commit} onCancel={() => { void cancel(); }} />}
+    {savedHere && pending?.id && <div className="space-y-2"><p role="status" className="text-sm">Your profile has been saved locally.</p><Button type="button" variant="brand" size="md" disabled={busy} onClick={async () => { setBusy(true); setError(null); try { await acknowledge(pending); } catch { setError("Your profile is saved. Could not confirm completion; try again later."); } finally { setBusy(false); } }}>Finish transfer</Button></div>}
+    {pending && !preview && !savedHere && <Button type="button" variant="ghost" size="md" disabled={busy} onClick={cancel}>Cancel transfer review</Button>}
+    {error && <p role="alert" className="text-sm text-destructive">{error}</p>}
+    {status && <p role="status" className="text-sm font-semibold">{status}</p>}
+  </div>;
 }
+export function ProfileTransfers() { return <TransferPanel controller={useStore()} />; }

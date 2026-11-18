@@ -7,7 +7,7 @@ import type { User } from "./profile";
 import { evaluateApplication, preparationKeys, stepKey, type Mode } from "./prepare";
 import type { DocumentEvidence, DocumentEvidenceMap } from "./documents";
 import type { Budget, Setup } from "./prefs";
-import { ProfileRepository, STORAGE_KEY, type ProfileState, type ImportPreview, type ImportChoice } from "./profile-repository";
+import { ProfileRepository, STORAGE_KEY, type ProfileState, type ImportPreview, type ImportChoice, type ImportOptions } from "./profile-repository";
 import { exportBackup } from "./backup";
 import { profileToken } from "./revisions";
 export type { User } from "./profile";
@@ -16,17 +16,16 @@ export interface BackupRestoreController {
   users: User[];
   activeId: string | null;
   undoSnapshot: ProfileState["undo"];
+  importReceipts?: Record<string, string>;
   downloadBackup: (id: string) => Promise<string>;
   previewBackup: (source: string) => Promise<ImportPreview>;
-  commitBackup: (preview: ImportPreview, choice: ImportChoice, options: { confirmed?: boolean; acknowledged?: boolean }) => Promise<string | null>;
+  commitBackup: (preview: ImportPreview, choice: ImportChoice, options: ImportOptions) => Promise<string | null>;
   undoReplacement: (token: string) => Promise<string | null>;
 }
 interface Store extends BackupRestoreController {
   ready: boolean;
   me: User | null;
   createProfile: (v: { name: string; age: number }) => Promise<string | null>;
-  /** Legacy transfer preview only. Future transports must use previewBackup/commitBackup. */
-  importProfile: (profile: unknown) => string | null;
   selectProfile: (id: string) => Promise<string | null>;
   logout: () => void;
   toggleOwned: (id: string) => void;
@@ -85,7 +84,6 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   const createProfile = useCallback(({ name, age }: { name: string; age: number }) => perform((repo) => repo.create(name, age)), [perform]);
   const selectProfile = useCallback((id: string) => perform((repo) => repo.select(id)), [perform]);
   const logout = useCallback(() => { void perform((repo) => repo.select(null)); }, [perform]);
-  const importProfile = useCallback(() => "Use Backup & restore to review this profile before saving.", []);
   const updateMe = useCallback((update: (p: User) => User, expectedToken?: string | null) => {
     const id = saved.current.activeId;
     if (!id) return Promise.resolve("No active profile.");
@@ -98,7 +96,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     return exportBackup(profile);
   }, [requireRepo]);
   const previewBackup = useCallback((source: string) => requireRepo().preview(source), [requireRepo]);
-  const commitBackup = useCallback((preview: ImportPreview, choice: ImportChoice, options: { confirmed?: boolean; acknowledged?: boolean }) => perform((repo) => repo.commit(preview, choice, options)), [perform]);
+  const commitBackup = useCallback((preview: ImportPreview, choice: ImportChoice, options: ImportOptions) => perform((repo) => repo.commit(preview, choice, options)), [perform]);
   const undoReplacement = useCallback((token: string) => perform((repo) => repo.undo(token)), [perform]);
   const toggleOwned = useCallback(
     (id: string) =>
@@ -198,8 +196,8 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   );
   const me = useMemo(() => users.find((p) => p.id === meId) ?? null, [users, meId]);
   const value: Store = {
-    ready, users, me, activeId: meId, undoSnapshot: state.undo,
-    createProfile, selectProfile, logout, importProfile,
+    ready, users, me, activeId: meId, undoSnapshot: state.undo, importReceipts: state.importReceipts,
+    createProfile, selectProfile, logout,
     toggleOwned, togglePrep, toggleTrack, setPriority, savePrefs, setFact, setMode, setDocumentEvidence,
     downloadBackup, previewBackup, commitBackup, undoReplacement,
   };

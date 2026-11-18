@@ -8,7 +8,7 @@ import { EXTRA_DOCUMENTS } from "@/data/documents";
 import { BUDGETS, DEFAULT_SETUP, SETUPS, type Budget, type Setup } from "@/lib/prefs";
 import type { User } from "@/lib/store";
 import { CardIcon } from "./icons";
-import { TransferPanel } from "./TransferPanel";
+import { ProfileTransfers } from "./TransferPanel";
 import { ProfileBackupRestore } from "./BackupRestorePanel";
 
 const INVENTORY = [...CARDS, ...EXTRA_DOCUMENTS];
@@ -20,7 +20,6 @@ export function SettingsScreen({
   onEditCollection,
   onSwitchProfile,
   onCreateProfile,
-  onImport,
 }: {
   me: User | null;
   onSavePrefs: (p: {
@@ -33,7 +32,6 @@ export function SettingsScreen({
   onEditCollection: () => void;
   onSwitchProfile: () => void;
   onCreateProfile: () => void;
-  onImport: (profile: unknown) => string | null;
 }) {
   return (
     <div className="mx-auto w-full max-w-md space-y-10 px-5 pt-6 pb-12">
@@ -52,7 +50,7 @@ export function SettingsScreen({
         </section>
       )}
       <ProfileBackupRestore />
-      <TransferPanel me={me} onImport={onImport} />
+      <ProfileTransfers />
     </div>
   );
 }

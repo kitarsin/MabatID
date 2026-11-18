@@ -328,3 +328,31 @@ test("even empty obsolete document and checklist entries require explicit acknow
   assert.ok(parsed.warnings.some((w) => w.includes("document entry “retired”")));
   assert.ok(parsed.warnings.some((w) => w.includes("checklist entry “retired”")));
 });
+
+test("transfer import receipts commit atomically, survive reload, and prevent duplicate keep-both imports", async () => {
+  const { repo, storage, exclusive, state } = await fixture();
+  const preview = await incomingPreview(repo, await edit(state.users[0],{age:48}));
+  const receipt = crypto.randomUUID();
+  const next = await repo.commit(preview,"keep-both",{receipt});
+  assert.equal(next.users.length,2); assert.equal(next.importReceipts?.[receipt],next.activeId);
+  const reload = new ProfileRepository(storage,exclusive); await reload.load();
+  const repeated = await reload.commit(preview,"keep-both",{receipt});
+  assert.equal(repeated.users.length,2); assert.equal(repeated.activeId,next.activeId);
+  assert.equal(profileToken(repeated.users[1]),profileToken(next.users[1]));
+});
+
+test("failed transfer imports save neither a candidate profile nor an import receipt", async () => {
+  const { repo, storage, state } = await fixture();
+  const preview = await incomingPreview(repo,await edit(state.users[0],{age:48}));
+  const before = storage.getItem(STORAGE_KEY); storage.failWrite = true;
+  await assert.rejects(repo.commit(preview,"keep-both",{receipt:crypto.randomUUID()}));
+  assert.equal(storage.getItem(STORAGE_KEY),before);
+});
+
+test("keeping identical current content creates no revision and can record a completion receipt", async () => {
+  const { repo, state, storage } = await fixture(), p = state.users[0];
+  const preview = await incomingPreview(repo,p), writes = storage.writes;
+  await repo.commit(preview,"same"); assert.equal(storage.writes,writes);
+  const receipt = crypto.randomUUID(), next = await repo.commit(preview,"same",{receipt});
+  assert.equal(profileToken(next.users[0]),profileToken(p)); assert.equal(next.importReceipts?.[receipt],p.id);
+});

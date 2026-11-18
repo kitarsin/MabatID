@@ -5,7 +5,7 @@ import { canonical, compareProfiles, contentEqual, profileToken, revise, validHi
 export const STORAGE_KEY = "mabatid.profiles.v3";
 export const LOCK_NAME = "mabatid-profile-storage";
 export interface UndoSnapshot { before: User; afterToken: string; profileId: string }
-export interface ProfileState { version: 3; users: User[]; activeId: string | null; undo: UndoSnapshot | null }
+export interface ProfileState { version: 3; users: User[]; activeId: string | null; undo: UndoSnapshot | null; importReceipts?: Record<string, string> }
 export interface ImportPreview {
   backup: ParsedBackup;
   targetToken: string | null;
@@ -13,10 +13,12 @@ export interface ImportPreview {
   differences: ProfileDifference[];
   targetName?: string;
 }
-export type ImportChoice = "new" | "replace" | "keep-both";
+export interface ImportOptions { confirmed?: boolean; acknowledged?: boolean; receipt?: string }
+export type ImportChoice = "new" | "replace" | "keep-both" | "same";
 export type StoragePort = Pick<Storage, "getItem" | "setItem" | "removeItem">;
 export type Exclusive = <T>(task: () => Promise<T>) => Promise<T>;
 export class ProfileStorageError extends Error {}
+const receiptId = (id: string) => /^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/i.test(id);
 const empty = (): ProfileState => ({ version: 3, users: [], activeId: null, undo: null });
 const message = (e: unknown) => e instanceof ProfileStorageError ? e : new ProfileStorageError("Could not save profiles. Browser storage may be full or unavailable. Your saved data has not been replaced.");
 const browserLock: Exclusive = async (task) => {
@@ -56,7 +58,9 @@ export class ProfileRepository {
         if (before.id !== raw.undo.profileId || typeof raw.undo.afterToken !== "string") throw new Error("invalid undo");
         undo = { before, afterToken: raw.undo.afterToken, profileId: before.id };
       }
-      return { version: 3, users, activeId: raw.activeId, undo };
+      const importReceipts = raw.importReceipts ?? {};
+      if (typeof importReceipts !== "object" || Array.isArray(importReceipts) || Object.keys(importReceipts).length > 256 || Object.entries(importReceipts).some(([id, profileId]) => !receiptId(id) || typeof profileId !== "string" || !profileId || profileId.length > 128)) throw new Error("invalid import receipts");
+      return { version: 3, users, activeId: raw.activeId, undo, importReceipts };
     } catch (e) {
       if (e instanceof ProfileStorageError) throw e;
       throw new ProfileStorageError("Could not read saved profiles. Existing browser data has been left untouched.");
@@ -140,14 +144,20 @@ export class ProfileRepository {
       differences: current ? diffProfiles(current, backup.profile) : [],
     };
   }
-  async commit(preview: ImportPreview, choice: ImportChoice, options: { confirmed?: boolean; acknowledged?: boolean } = {}) {
+  async commit(preview: ImportPreview, choice: ImportChoice, options: ImportOptions = {}) {
     return this.transaction(async (state) => {
+      if (options.receipt && !receiptId(options.receipt)) throw new ProfileStorageError("Invalid import receipt.");
+      if (options.receipt && state.importReceipts?.[options.receipt]) return state;
       const incoming = preview.backup.profile;
       const current = state.users.find((p) => p.id === incoming.id);
       if (profileToken(current) !== preview.targetToken)
         throw new ProfileStorageError("The target profile changed after this preview. Review the file again before importing.");
       if (preview.backup.warnings.length && !options.acknowledged)
         throw new ProfileStorageError("Acknowledge the backup warnings before importing.");
+      if (choice === "same") {
+        if (!current || !contentEqual(current, incoming)) throw new ProfileStorageError("The profile is no longer identical. Review again.");
+        return options.receipt ? { ...state, importReceipts: Object.fromEntries(Object.entries({ ...state.importReceipts, [options.receipt]: current.id }).slice(-256)) } : state;
+      }
       if (choice === "new" && current) throw new ProfileStorageError("This identity already exists. Review replacement or keep both.");
       if (choice === "replace" && (!current || !options.confirmed))
         throw new ProfileStorageError("Explicit confirmation is required before replacing an existing profile.");
@@ -164,7 +174,9 @@ export class ProfileRepository {
       } else {
         saved = incoming.revision ? structuredClone(incoming) : await revise(incoming);
       }
-      return { ...state, users: choice === "replace" ? state.users.map((p) => p.id === incoming.id ? saved : p) : [...state.users, saved], activeId: saved.id, undo };
+      const importReceipts = { ...state.importReceipts, ...(options.receipt ? { [options.receipt]: saved.id } : {}) };
+      const boundedReceipts = Object.fromEntries(Object.entries(importReceipts).slice(-256));
+      return { ...state, importReceipts: boundedReceipts, users: choice === "replace" ? state.users.map((p) => p.id === incoming.id ? saved : p) : [...state.users, saved], activeId: saved.id, undo };
     });
   }
   async undo(expectedAfterToken: string) {
