@@ -7,6 +7,8 @@
 <p align="center"><strong>One step unlocks the next.</strong></p>
 <p align="center">A clearer path from baseline documents to Philippine government IDs.</p>
 
+<p align="center">Access the live site at <a href="https://mabatid.vercel.app">mabatid.vercel.app</a>.</p>
+
 <p align="center">
   <a href="#features">Features</a> ·
   <a href="#how-it-works">How it works</a> ·
