@@ -375,8 +375,8 @@
 }
 .id-flip {
   transform-style: preserve-3d;
-  /* slight overshoot so the card "lands" on its new side */
-  transition: transform 720ms cubic-bezier(0.34, 1.25, 0.5, 1);
+  /* A symmetric curve puts the edge-on point halfway through the transition. */
+  transition: transform 720ms ease-in-out;
 }
 .id-flip[data-flipped] {
   transform: rotateY(180deg);
@@ -384,6 +384,8 @@
 .id-card {
   -webkit-backface-visibility: hidden;
   backface-visibility: hidden;
+  /* Hide the face turned away, including any separately composited descendants. */
+  transition: visibility 0s linear 360ms;
   background:
     radial-gradient(90% 70% at 100% 100%, color-mix(in srgb, var(--color-mist) 55%, transparent), transparent 70%),
     repeating-radial-gradient(circle at 15% 130%, rgb(0 90 156 / 0.06) 0 1px, transparent 1px 7px),
@@ -399,11 +401,18 @@
     0 30px 50px -26px rgb(27 54 93 / 0.5);
 }
 .id-card-back {
+  visibility: hidden;
   transform: rotateY(180deg);
   background:
     radial-gradient(90% 70% at 0% 100%, color-mix(in srgb, var(--color-amber) 14%, transparent), transparent 70%),
     repeating-radial-gradient(circle at 85% 130%, rgb(27 54 93 / 0.05) 0 1px, transparent 1px 7px),
     linear-gradient(140deg, #f7fbfd 0%, #eaf4f8 100%);
+}
+.id-flip[data-flipped] > .id-card:not(.id-card-back) {
+  visibility: hidden;
+}
+.id-flip[data-flipped] > .id-card-back {
+  visibility: visible;
 }
 .id-sheen {
   background: radial-gradient(45% 60% at var(--mx) var(--my), rgb(255 255 255 / 0.7), transparent 70%);
@@ -683,6 +692,9 @@ details[open] > .disclosure-body,
   }
   .id-flip {
     transition: none !important;
+  }
+  .id-card {
+    transition: none;
   }
   .btn-shine::after {
     display: none;
