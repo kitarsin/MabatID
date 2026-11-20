@@ -67,8 +67,7 @@ export function TeamIdCard({
   const backRef = useRef<HTMLDivElement>(null);
   const [photoFailed, setPhotoFailed] = useState(false);
 
-  // Flipping from the card itself makes the focused face inert (the browser drops focus); carry focus to
-  // the flip control on the face now showing.
+  // Wait for the flip to finish before moving focus to the newly visible face.
   const refocus = useRef(false);
   const flipFromCard = () => {
     refocus.current = true;
@@ -77,8 +76,12 @@ export function TeamIdCard({
   useEffect(() => {
     if (!refocus.current) return;
     refocus.current = false;
-    const shown = flipped ? backRef.current : frontRef.current;
-    shown?.querySelector<HTMLElement>("button")?.focus({ preventScroll: true });
+    const delay = window.matchMedia("(prefers-reduced-motion: reduce)").matches ? 0 : 740;
+    const timer = window.setTimeout(() => {
+      const shown = flipped ? backRef.current : frontRef.current;
+      shown?.querySelector<HTMLElement>("button")?.focus({ preventScroll: true });
+    }, delay);
+    return () => window.clearTimeout(timer);
   }, [flipped]);
   const name = `${member.givenNames} ${member.lastName}`;
   const handle = githubHandle(member.github);
